@@ -77,3 +77,41 @@ body.has-scene { background: #0e2a33; }
 @media (prefers-reduced-motion: reduce) {
   .scene *, .scene { animation: none !important; }
 }
+
+/* ============================================================
+   Ichki sahifalar uchun fon rasmlari (bosh sahifa bilan bir uslubda).
+   Lokal rasm qo'yish: img/bg-car.jpg (mashina sahifasi),
+   img/bg-service.jpg (servis paneli).
+   ============================================================ */
+
+/* Mashina sahifasi: moy almashtirish. Foto: Unsplash (Unsplash License) */
+body.scene-car {
+  --bg-remote: url("https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=2000&q=70");
+  --bg-local: url("/img/bg-car.jpg");
+}
+/* Servis paneli: ustaxona asboblari. Foto: Unsplash (Unsplash License) */
+body.scene-service {
+  --bg-remote: url("https://images.unsplash.com/photo-1530046339160-ce3e530c7d2f?auto=format&fit=crop&w=2000&q=70");
+  --bg-local: url("/img/bg-service.jpg");
+}
+
+/* Ichki sahifalarda kartochkalar ko'p — fon biroz qorong'iroq, harakat sekinroq */
+.scene-car .scene .shade,
+.scene-service .scene .shade {
+  background:
+    linear-gradient(180deg, rgba(8, 28, 35, .86) 0%, rgba(8, 28, 35, .72) 50%, rgba(8, 28, 35, .9) 100%),
+    radial-gradient(ellipse at 80% 90%, rgba(242, 165, 65, .2), transparent 60%);
+}
+.scene-car .scene .photo,
+.scene-service .scene .photo { animation-duration: 48s; }
+
+/* Kartochkadan tashqaridagi matn va tugmalar fon ustida o'qilsin */
+.has-scene .wrap > .empty,
+.has-scene .topbar .who { color: rgba(255, 255, 255, .85); }
+.has-scene .topbar .btn-ghost {
+  color: #fff; border-color: rgba(255, 255, 255, .4); background: rgba(255, 255, 255, .08);
+}
+.has-scene .tabs button:not([aria-pressed="true"]) {
+  color: #fff; border-color: rgba(255, 255, 255, .35); background: rgba(8, 28, 35, .35);
+}
+.has-scene .tile { box-shadow: 0 10px 34px rgba(0, 0, 0, .3); }

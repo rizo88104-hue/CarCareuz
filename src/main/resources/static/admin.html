@@ -6,6 +6,7 @@
   <meta name="robots" content="noindex">
   <title>Admin panel — CarCare</title>
   <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/scene.css">
   <style>
     .wrap { max-width: 1040px; }
     .topbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
@@ -51,7 +52,14 @@
     .tablebox { overflow-x: auto; }
   </style>
 </head>
-<body>
+<body class="has-scene scene-service">
+<!-- Fon: avtoservis ustaxonasi rasmi (bezak, ekran o'quvchilar uchun yashirilgan) -->
+<div class="scene" aria-hidden="true">
+  <div class="photo"></div>
+  <div class="shade"></div>
+  <div class="glow g1"></div>
+  <div class="glow g2"></div>
+</div>
 <div class="wrap">
 
   <!-- ============ LOGIN ============ -->

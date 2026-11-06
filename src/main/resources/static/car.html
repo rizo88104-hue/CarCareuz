@@ -5,10 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mashina sahifasi — CarCare</title>
   <link rel="stylesheet" href="/app.css">
+  <link rel="stylesheet" href="/scene.css">
 </head>
-<body>
+<body class="has-scene scene-car">
+<!-- Fon: moy almashtirish rasmi (bezak, ekran o'quvchilar uchun yashirilgan) -->
+<div class="scene" aria-hidden="true">
+  <div class="photo"></div>
+  <div class="shade"></div>
+  <div class="glow g1"></div>
+  <div class="glow g2"></div>
+</div>
 <div class="wrap">
-  <a class="brand" href="/" style="color:inherit;text-decoration:none"><div class="logo">🛢</div> CarCare</a>
+  <a class="brand" href="/" style="text-decoration:none"><div class="logo">🛢</div> CarCare</a>
 
   <div id="loading" class="empty">Yuklanmoqda...</div>
   <div id="notFound" class="card hidden">
