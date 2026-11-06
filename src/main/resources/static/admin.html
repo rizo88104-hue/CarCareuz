@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Admin panel — CarCare</title>
+  <link rel="stylesheet" href="/app.css">
+  <style>
+    .wrap { max-width: 1040px; }
+    .topbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .who { font-size: 14px; color: var(--muted); }
+    .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .tabs button { background: transparent; color: var(--muted); border: 1px solid var(--line); padding: 8px 14px; }
+    .tabs button[aria-pressed="true"] { background: var(--brand); color: var(--brand-ink); border-color: var(--brand); }
+    .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+    .tile b { display: block; font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .tile span { font-size: 13px; color: var(--muted); }
+    .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+    @media (max-width: 820px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+    .item { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; background: #fff; }
+    .item-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }
+    .item-title { font-weight: 800; }
+    .small { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+    .tel { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--brand); text-decoration: none; border: 1px solid var(--line); border-radius: 10px; padding: 7px 11px; font-size: 14px; }
+    .tg-badge { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .tg-badge.on { background: #e3f1fa; color: #1c79ad; }
+    .tg-badge.off { background: #f1eee8; color: var(--muted); }
+    .ownerbox { background: #f7f5f0; border-radius: 10px; padding: 12px; font-size: 14px; }
+    .check { display: flex; gap: 10px; align-items: center; font-weight: 600; font-size: 14px; }
+    .check input { width: auto; }
+    .pill.grey { background: #eceae4; color: var(--muted); }
+    .missed { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; }
+    .missed .row-m { display: grid; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    .reason { font-weight: 700; color: var(--bad); font-size: 14px; }
+    .statline { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
+    .inline { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .inline input { padding: 8px 10px; flex: 1 1 200px; }
+    .result { border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; font-size: 14px; }
+    .result.ok { background: #e8f5ec; color: #1f5c3a; }
+    .result.warn { background: #fdf3e0; color: #7a5410; }
+    h2 small { font-weight: 600; color: var(--muted); font-size: 13px; }
+    .logrow { display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+    .logrow time { color: var(--muted); flex: none; width: 110px; font-size: 13px; font-variant-numeric: tabular-nums; }
+    .logrow .meta { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 8px 6px; border-bottom: 1px solid var(--line); }
+    td { padding: 10px 6px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+    .tablebox { overflow-x: auto; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ LOGIN ============ -->
+  <div id="vLogin" class="hidden">
+    <div class="brand"><div class="logo">🛢</div> CarCare · Admin</div>
+    <div class="card" style="max-width:420px">
+      <h2>Tizimga kirish</h2>
+      <div id="loginMsg" class="msg"></div>
+      <form id="loginForm" novalidate>
+        <div class="field"><label for="lu">Login</label><input id="lu" autocomplete="username" required></div>
+        <div class="field"><label for="lp">Parol</label><input id="lp" type="password" autocomplete="current-password" required></div>
+        <button class="btn-block" type="submit">Kirish</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ YUQORI QISM ============ -->
+  <div id="vTop" class="topbar hidden">
+    <div class="brand" style="margin:0"><div class="logo">🛢</div> <span id="topTitle">CarCare</span></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span class="who" id="who"></span>
+      <button class="btn-ghost btn-sm" id="pwToggle" type="button">Parol</button>
+      <button class="btn-ghost btn-sm" id="logout" type="button">Chiqish</button>
+    </div>
+  </div>
+  <div id="pwCard" class="card hidden" style="max-width:420px">
+    <h2>Parolni o'zgartirish</h2>
+    <div id="pwMsg" class="msg"></div>
+    <form id="pwForm" novalidate>
+      <div class="field"><label for="pwOld">Joriy parol</label><input id="pwOld" type="password" autocomplete="current-password"></div>
+      <div class="field"><label for="pwNew">Yangi parol (kamida 8 belgi)</label><input id="pwNew" type="password" autocomplete="new-password"></div>
+      <button type="submit">Saqlash</button>
+    </form>
+  </div>
+  <div id="tabs" class="tabs hidden" role="group" aria-label="Bo'limlar"></div>
+
+  <!-- ============ SERVIS: ISHLAR ============ -->
+  <div id="vWork" class="hidden">
+    <div class="tiles" id="cTiles"></div>
+    <div class="cols">
+      <div class="card">
+        <h2>Bajarilgan ishni kiritish</h2>
+        <div id="saveResult"></div>
+        <form id="recForm" novalidate>
+          <div class="field">
+            <label for="rPlate">Mashina raqami</label>
+            <input id="rPlate" class="plate" placeholder="01 A 123 BC" maxlength="14" autocomplete="off">
+          </div>
+          <div id="ownerBox" class="field hidden"></div>
+          <div id="newOwner" class="hidden">
+            <div class="hint" style="margin-bottom:8px">Bu mashina hali ro'yxatda yo'q — egasining ma'lumotlarini kiriting.</div>
+            <div class="row">
+              <div class="field"><label for="rFn">Ism</label><input id="rFn" maxlength="60"></div>
+              <div class="field"><label for="rLn">Familiya</label><input id="rLn" maxlength="60"></div>
+            </div>
+            <div class="field"><label for="rPh">Telefon</label><input id="rPh" type="tel" value="+998 "></div>
+          </div>
+          <div class="row">
+            <div class="field"><label for="rType">Nima qilindi?</label><select id="rType"></select></div>
+            <div class="field" id="masterWrap"><label for="rMaster">Usta</label><select id="rMaster"></select></div>
+          </div>
+          <div class="field hidden" id="rCustomWrap"><label for="rCustom">Nomi</label><input id="rCustom" maxlength="80"></div>
+          <div class="row">
+            <div class="field"><label for="rDone">Bajarilgan sana</label><input id="rDone" type="date"></div>
+            <div class="field"><label for="rNext">Keyingi almashtirish</label><input id="rNext" type="date">
+              <div class="chips">
+                <span class="chip" data-m="3">+3 oy</span><span class="chip" data-m="6">+6 oy</span><span class="chip" data-m="12">+1 yil</span>
+              </div>
+            </div>
+          </div>
+          <div class="row">
+            <div class="field"><label for="rKm">Probeg, km</label><input id="rKm" type="number" min="0" placeholder="ixtiyoriy"></div>
+            <div class="field"><label for="rNote">Izoh</label><input id="rNote" maxlength="300" placeholder="Masalan: 205/55 R16"></div>
+          </div>
+          <label class="check field" for="rReady" id="readyWrap"><input id="rReady" type="checkbox" checked> Mijozga "Tayyor, keling" xabarini yuborish</label>
+          <div class="hint hidden" id="masterHint" style="margin-bottom:12px">Ish saqlanadi, mijozga xabarni administrator yuboradi.</div>
+          <button class="btn-block" type="submit" id="rSave">Saqlash</button>
+        </form>
+      </div>
+
+      <div>
+        <div class="card" id="callCard">
+          <h2>Qo'ng'iroq ro'yxati <small>· muddati yaqin va o'tganlar</small></h2>
+          <div id="callList"></div>
+        </div>
+        <div class="card">
+          <h2 id="recentTitle">Oxirgi ishlar</h2>
+          <div id="recent"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ DIREKTOR: XODIMLAR ============ -->
+  <div id="vStaff" class="hidden">
+    <div class="cols">
+      <div class="card">
+        <h2>Xodimlar</h2>
+        <div class="hint">Bloklangan xodim barcha qurilmalardan darhol chiqariladi.</div>
+        <div id="staffMsg" class="msg" style="margin-top:10px"></div>
+        <div class="tablebox" style="margin-top:10px"><table>
+          <thead><tr><th>Ism</th><th>Rol</th><th>Login</th><th>Holat</th><th></th></tr></thead>
+          <tbody id="staffRows"></tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <h2>Yangi xodim</h2>
+        <div id="sfMsg" class="msg"></div>
+        <form id="staffForm" novalidate>
+          <div class="field"><label for="sfName">Ism familiya</label><input id="sfName" maxlength="80"></div>
+          <div class="field"><label for="sfRole">Rol</label>
+            <select id="sfRole"><option value="MASTER">Usta — faqat ish kiritadi</option><option value="ADMINISTRATOR">Administrator — mijozlar bilan ishlaydi</option></select></div>
+          <div class="row">
+            <div class="field"><label for="sfUser">Login</label><input id="sfUser" maxlength="40" autocomplete="off"></div>
+            <div class="field"><label for="sfPass">Parol</label><input id="sfPass" type="text" autocomplete="off" placeholder="kamida 8 belgi"></div>
+          </div>
+          <button type="submit">Qo'shish</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ JURNAL (direktor va super admin) ============ -->
+  <div id="vLog" class="hidden">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <div><h2 style="margin:0">Faollik jurnali</h2><div class="hint">Kim, qachon, nima qilgani. Oxirgi 300 ta yozuv.</div></div>
+        <div class="field hidden" id="logFilterWrap" style="margin:0;min-width:220px"><label for="logFilter">Servis bo'yicha</label><select id="logFilter"></select></div>
+      </div>
+      <div id="logList" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- ============ SUPER ADMIN: SERVISLAR ============ -->
+  <div id="vSuper" class="hidden">
+    <div class="tiles" id="sTiles"></div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <h2 style="margin:0">Avtoservislar</h2>
+        <button class="btn-sm" id="cAddToggle" type="button">+ Servis qo'shish</button>
+      </div>
+      <div class="hint" style="margin-top:6px">Avval muammoli servislar. «Faol emas» — 14 kundan beri hech narsa kiritmagan. «Ishlatmayapti» — qo'shilgandan beri bitta ham ish kiritmagan.</div>
+      <div id="cMsg" class="msg" style="margin-top:12px"></div>
+      <form id="cForm" class="hidden" novalidate style="border:1px dashed var(--line);border-radius:12px;padding:14px;margin-top:14px">
+        <div class="row">
+          <div class="field"><label for="cName">Servis nomi</label><input id="cName" maxlength="100" placeholder="Masalan: Avto Lider"></div>
+          <div class="field"><label for="cPhone">Telefon</label><input id="cPhone" type="tel" placeholder="+998 71 200 00 00"></div>
+        </div>
+        <div class="field"><label for="cAddr">Manzil</label><input id="cAddr" maxlength="200" placeholder="Toshkent, Chilonzor 9-kvartal"></div>
+        <div class="field"><label for="cDir">Direktor ismi</label><input id="cDir" maxlength="80" placeholder="Ism Familiya"></div>
+        <div class="row">
+          <div class="field"><label for="cUser">Direktor logini</label><input id="cUser" maxlength="40" autocomplete="off" placeholder="avtolider"></div>
+          <div class="field"><label for="cPass">Parol</label><input id="cPass" type="text" autocomplete="off" placeholder="kamida 8 belgi"></div>
+        </div>
+        <div class="hint" style="margin-bottom:12px">Direktor kirib, administrator va ustalarni o'zi qo'shadi.</div>
+        <button type="submit">Qo'shish</button>
+      </form>
+      <div id="centers" style="margin-top:14px"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const pad = (n) => String(n).padStart(2, '0');
+  const iso = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  const fmt = (s) => { if (!s) return ''; const [y, m, d] = s.slice(0, 10).split('-'); return d + '.' + m + '.' + y; };
+  const fmtTime = (s) => { const d = new Date(s); return pad(d.getDate()) + '.' + pad(d.getMonth() + 1) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+  const parse = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const show = (id, on) => $(id).classList.toggle('hidden', !on);
+
+  const TABS = {
+    SUPER_ADMIN:   [['super', 'Avtoservislar'], ['log', 'Faollik jurnali']],
+    DIRECTOR:      [['work', 'Ishlar'], ['staff', 'Xodimlar'], ['log', 'Faollik jurnali']],
+    ADMINISTRATOR: [['work', 'Ishlar']],
+    MASTER:        [['work', 'Ish kiritish']]
+  };
+  const VIEWS = { work: 'vWork', staff: 'vStaff', log: 'vLog', super: 'vSuper' };
+
+  let token = null, me = null, tab = null, carExists = null, lookupTimer = null, typesLoaded = false;
+  try { token = localStorage.getItem('carcare:admin'); } catch (e) {}
+
+  async function api(path, opts = {}) {
+    const res = await fetch('/api/admin' + path, {
+      ...opts,
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }
+    });
+    if (res.status === 204) return null;
+    const body = await res.json().catch(() => ({}));
+    if ((res.status === 401 || res.status === 403) && path !== '/login' && path !== '/me' && !path.startsWith('/password')) {
+      if (res.status === 401) { setToken(null); start(); }
+    }
+    if (!res.ok) throw new Error(body.error || 'Xatolik');
+    return body;
+  }
+  function setToken(t) {
+    token = t;
+    try { t ? localStorage.setItem('carcare:admin', t) : localStorage.removeItem('carcare:admin'); } catch (e) {}
+  }
+  function flash(id, text, type) { const m = $(id); m.textContent = text; m.className = 'msg show ' + (type || 'ok'); }
+  function daysPill(d) {
+    if (d < 0) return '<span class="pill bad">' + (-d) + ' kun o\'tdi</span>';
+    if (d === 0) return '<span class="pill bad">Bugun</span>';
+    if (d <= 7) return '<span class="pill warn">' + d + ' kun qoldi</span>';
+    return '<span class="pill ok">' + d + ' kun qoldi</span>';
+  }
+  const tgBadge = (on) => '<span class="tg-badge ' + (on ? 'on' : 'off') + '">' + (on ? 'Telegram ✓' : 'Telegram yo\'q') + '</span>';
+  const telLink = (phone, display) => phone ? '<a class="tel" href="tel:+' + esc(phone) + '">📞 ' + esc(display) + '</a>' : '';
+  const canContact = () => me && (me.role === 'DIRECTOR' || me.role === 'ADMINISTRATOR');
+
+  // ================= KIRISH VA BO'LIMLAR =================
+  async function start() {
+    ['vLogin', 'vTop', 'pwCard', 'tabs', 'vWork', 'vStaff', 'vLog', 'vSuper'].forEach(v => show(v, false));
+    if (!token) { show('vLogin', true); return; }
+    try {
+      me = await api('/me');
+    } catch (e) { setToken(null); show('vLogin', true); flash('loginMsg', e.message, 'err'); return; }
+    show('vTop', true);
+    $('topTitle').textContent = me.role === 'SUPER_ADMIN' ? 'Super admin' : me.centerName;
+    $('who').textContent = me.fullName + ' · ' + me.roleLabel;
+    const tabs = TABS[me.role] || [];
+    $('tabs').innerHTML = tabs.map(([k, l]) => '<button type="button" data-tab="' + k + '">' + l + '</button>').join('');
+    show('tabs', tabs.length > 1);
+    openTab(tabs[0][0]);
+  }
+
+  function openTab(k) {
+    tab = k;
+    Object.values(VIEWS).forEach(v => show(v, false));
+    show(VIEWS[k], true);
+    document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tab === k)));
+    if (k === 'work') { initWork(); loadWork(); }
+    if (k === 'staff') loadStaff();
+    if (k === 'log') loadLog();
+    if (k === 'super') loadSuper();
+  }
+
+  $('loginForm').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api('/login', { method: 'POST', body: JSON.stringify({ username: $('lu').value, password: $('lp').value }) });
+      setToken(r.token); $('lp').value = ''; $('loginMsg').className = 'msg';
+      start();
+    } catch (err) { flash('loginMsg', err.message, 'err'); }
+  };
+  $('logout').onclick = async () => { try { await api('/logout', { method: 'POST' }); } catch (e) {} setToken(null); start(); };
+  $('pwToggle').onclick = () => $('pwCard').classList.toggle('hidden');
+  $('pwForm').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api('/password', { method: 'POST', body: JSON.stringify({ oldPassword: $('pwOld').value, newPassword: $('pwNew').value }) });
+      $('pwOld').value = $('pwNew').value = '';
+      flash('pwMsg', 'Parol o\'zgartirildi');
+    } catch (err) { flash('pwMsg', err.message, 'err'); }
+  };
+
+  // ================= ISHLAR =================
+  async function initWork() {
+    const master = me.role === 'MASTER';
+    show('masterWrap', !master);
+    show('readyWrap', !master);
+    show('masterHint', master);
+    show('callCard', !master);
+    $('recentTitle').textContent = master ? 'Mening ishlarim' : 'Oxirgi ishlar';
+    if (typesLoaded) return;
+    typesLoaded = true;
+    const types = await fetch('/api/service-types').then(r => r.json());
+    $('rType').innerHTML = types.map(t => '<option value="' + t.code + '">' + esc(t.label) + '</option>').join('');
+    resetForm();
+  }
+
+  function resetForm() {
+    const today = new Date();
+    const keepMaster = $('rMaster').value;
+    $('recForm').reset();
+    $('rPh').value = '+998 ';
+    $('rDone').value = iso(today); $('rDone').max = iso(today);
+    const n = new Date(today); n.setMonth(n.getMonth() + 6); $('rNext').value = iso(n);
+    $('rReady').checked = true;
+    if (keepMaster) $('rMaster').value = keepMaster;
+    show('ownerBox', false); show('newOwner', false); show('rCustomWrap', false);
+    carExists = null;
+  }
+
+  $('rType').onchange = () => show('rCustomWrap', $('rType').value === 'OTHER');
+  document.querySelectorAll('#recForm .chip').forEach(ch => ch.onclick = () => {
+    const b = $('rDone').value ? parse($('rDone').value) : new Date();
+    b.setMonth(b.getMonth() + Number(ch.dataset.m));
+    $('rNext').value = iso(b);
+  });
+  $('rPlate').addEventListener('input', () => {
+    clearTimeout(lookupTimer);
+    const v = $('rPlate').value.replace(/[^a-zA-Z0-9]/g, '');
+    if (v.length < 6) { show('ownerBox', false); show('newOwner', false); carExists = null; return; }
+    lookupTimer = setTimeout(lookup, 400);
+  });
+
+  async function lookup() {
+    try {
+      const c = await api('/center/lookup?plate=' + encodeURIComponent($('rPlate').value));
+      carExists = c.exists;
+      if (c.exists) {
+        $('ownerBox').innerHTML = '<div class="ownerbox"><b>' + esc(c.firstName + ' ' + c.lastName) + '</b>' + (c.phoneDisplay ? ' · ' + esc(c.phoneDisplay) : '') + ' ' + tgBadge(c.telegramConnected) +
+          (c.activeServices.length ? '<div class="small" style="margin-top:6px">Hozirgi servislar: ' + c.activeServices.map(esc).join('; ') + '</div>' : '') + '</div>';
+        show('ownerBox', true); show('newOwner', false);
+      } else { show('ownerBox', false); show('newOwner', true); }
+    } catch (err) { show('ownerBox', false); show('newOwner', false); carExists = null; }
+  }
+
+  $('recForm').onsubmit = async (e) => {
+    e.preventDefault();
+    if (carExists === null) await lookup();
+    const master = me.role === 'MASTER';
+    const body = {
+      plateNumber: $('rPlate').value,
+      firstName: $('rFn').value || null, lastName: $('rLn').value || null, phone: $('rPh').value || null,
+      type: $('rType').value, customName: $('rCustom').value || null,
+      doneDate: $('rDone').value || null, nextDate: $('rNext').value || null,
+      mileage: $('rKm').value ? Number($('rKm').value) : null, nextMileage: null,
+      note: $('rNote').value || null,
+      masterId: !master && $('rMaster').value ? Number($('rMaster').value) : null,
+      notifyReady: !master && $('rReady').checked
+    };
+    $('rSave').disabled = true;
+    try {
+      const r = await api('/center/records', { method: 'POST', body: JSON.stringify(body) });
+      const rec = r.record, warn = r.readyDelivered === false;
+      let html = '<div class="result ' + (warn ? 'warn' : 'ok') + '">' + esc(r.message);
+      if (warn) html += '<div class="btns">' + telLink(rec.phone, rec.phoneDisplay) + '</div>';
+      if (r.carCreated && rec.carUrl) html += '<div class="btns"><span class="small">Mijoz sahifasi:</span> <button class="btn-ghost btn-sm" type="button" data-copy="' + esc(rec.carUrl) + '">Havolani nusxalash</button></div>';
+      $('saveResult').innerHTML = html + '</div>';
+      resetForm();
+      loadWork();
+    } catch (err) { $('saveResult').innerHTML = '<div class="result warn">' + esc(err.message) + '</div>'; }
+    $('rSave').disabled = false;
+  };
+
+  async function loadWork() {
+    try {
+      const d = await api('/center/dashboard');
+      const master = me.role === 'MASTER';
+      // Ustalar ro'yxati (direktor va administrator uchun)
+      if (!master) {
+        const cur = $('rMaster').value;
+        $('rMaster').innerHTML = '<option value="">' + esc(me.fullName) + ' (o\'zim)</option>' +
+          d.masters.map(m => '<option value="' + m.id + '">' + esc(m.fullName) + '</option>').join('');
+        if (cur) $('rMaster').value = cur;
+      }
+      const s = d.stats;
+      $('cTiles').innerHTML = s ? [
+        [s.last30Days, 'Oxirgi 30 kunda ish'], [s.customers, 'Mijozlar'],
+        [s.returnRatePct == null ? '—' : s.returnRatePct + '%', 'Qaytib kelganlar'],
+        [s.telegramConnected + ' / ' + s.customers, 'Telegram ulangan']
+      ].map(([v, l]) => '<div class="tile"><b>' + esc(v) + '</b><span>' + l + '</span></div>').join('') : '';
+      show('cTiles', !!s);
+
+      $('callList').innerHTML = d.callList.length ? d.callList.map(r =>
+        '<div class="item"><div class="item-top"><div><div class="item-title">' + esc(r.plateDisplay) + ' · ' + esc(r.ownerName) + '</div>' +
+        '<div class="small">' + esc(r.serviceName) + ' · ' + fmt(r.nextDate) + '</div></div>' + daysPill(r.daysLeft) + '</div>' +
+        '<div class="btns">' + telLink(r.phone, r.phoneDisplay) + tgBadge(r.telegramConnected) + '</div></div>').join('')
+        : '<div class="empty">Hozircha qo\'ng\'iroq qilinadigan mijoz yo\'q</div>';
+
+      $('recent').innerHTML = d.recent.length ? d.recent.map(r =>
+        '<div class="item"><div class="item-top"><div><div class="item-title">' + esc(r.plateDisplay) + ' · ' + esc(r.serviceName) + '</div>' +
+        '<div class="small">' + (master ? '' : esc(r.ownerName) + ' · ') + 'bajarildi ' + fmt(r.doneDate) + ' · keyingisi ' + fmt(r.nextDate) +
+        (r.masterName ? ' · usta: ' + esc(r.masterName) : '') + (r.note ? ' · ' + esc(r.note) : '') + '</div></div>' +
+        (r.active ? '' : '<span class="pill grey">Yangilangan</span>') + '</div>' +
+        (master ? '' : '<div class="btns">' +
+          (r.telegramConnected ? '<button class="btn-tg btn-sm" type="button" data-ready="' + r.id + '">✅ Tayyor, keling</button>' : '<span class="small">Telegram ulanmagan — qo\'ng\'iroq qiling</span>') +
+          telLink(r.phone, r.phoneDisplay) +
+          (r.readyNotifiedAt ? '<span class="small">Xabar yuborilgan: ' + esc(fmtTime(r.readyNotifiedAt)) + '</span>' : '') + '</div>') +
+        '</div>').join('') : '<div class="empty">Hali ish kiritilmagan</div>';
+    } catch (err) { }
+  }
+
+  // ================= DIREKTOR: XODIMLAR =================
+  async function loadStaff() {
+    try {
+      const list = await api('/center/staff');
+      $('staffRows').innerHTML = list.map(s =>
+        '<tr><td><b>' + esc(s.fullName) + '</b></td><td>' + esc(s.roleLabel) + '</td><td>' + esc(s.username) + '</td>' +
+        '<td><span class="pill ' + (s.blocked ? 'grey' : 'ok') + '">' + (s.blocked ? 'Bloklangan' : 'Faol') + '</span></td>' +
+        '<td style="text-align:right;white-space:nowrap">' + (s.role === 'DIRECTOR' ? '<span class="small">Direktor</span>' :
+          '<button class="btn-ghost btn-sm" type="button" data-block="' + s.id + '" data-to="' + (!s.blocked) + '">' + (s.blocked ? 'Faollashtirish' : 'Bloklash') + '</button> ' +
+          '<button class="btn-ghost btn-sm" type="button" data-spw="' + s.id + '">Parol</button>') + '</td></tr>' +
+        '<tr class="hidden" id="spw-' + s.id + '"><td colspan="5"><div class="inline"><input type="text" placeholder="Yangi parol, kamida 8 belgi" autocomplete="off"><button class="btn-sm" type="button" data-spwsave="' + s.id + '">Saqlash</button></div></td></tr>'
+      ).join('');
+    } catch (err) { flash('staffMsg', err.message, 'err'); }
+  }
+  $('staffForm').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api('/center/staff', { method: 'POST', body: JSON.stringify({ fullName: $('sfName').value, role: $('sfRole').value, username: $('sfUser').value, password: $('sfPass').value }) });
+      flash('sfMsg', 'Xodim qo\'shildi. Login va parolni unga bering.');
+      $('staffForm').reset();
+      loadStaff();
+    } catch (err) { flash('sfMsg', err.message, 'err'); }
+  };
+
+  // ================= JURNAL =================
+  let centersCache = [];
+  async function loadLog() {
+    const isSuper = me.role === 'SUPER_ADMIN';
+    show('logFilterWrap', isSuper);
+    try {
+      if (isSuper && !$('logFilter').options.length) {
+        const o = await api('/super/overview');
+        centersCache = o.list;
+        $('logFilter').innerHTML = '<option value="">Hammasi</option>' + o.list.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('');
+      }
+      const f = isSuper ? $('logFilter').value : '';
+      const list = await api(isSuper ? '/super/log' + (f ? '?centerId=' + f : '') : '/center/log');
+      $('logList').innerHTML = list.length ? list.map(l =>
+        '<div class="logrow"><time>' + esc(fmtTime(l.at)) + '</time><div><b>' + esc(l.actorName) + '</b> <span class="meta">· ' + esc(l.actorRole) +
+        (isSuper && l.centerName ? ', ' + esc(l.centerName) : '') + '</span><div>' + esc(l.action) + '</div></div></div>').join('')
+        : '<div class="empty">Hali yozuv yo\'q</div>';
+    } catch (err) { $('logList').innerHTML = '<div class="msg show err">' + esc(err.message) + '</div>'; }
+  }
+  $('logFilter').onchange = loadLog;
+
+  // ================= SUPER ADMIN =================
+  $('cAddToggle').onclick = () => $('cForm').classList.toggle('hidden');
+  $('cForm').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api('/super/centers', { method: 'POST', body: JSON.stringify({
+        name: $('cName').value, address: $('cAddr').value || null, phone: $('cPhone').value || null,
+        directorName: $('cDir').value, username: $('cUser').value, password: $('cPass').value }) });
+      flash('cMsg', 'Servis qo\'shildi. Login va parolni direktorga bering.');
+      $('cForm').reset(); $('cForm').classList.add('hidden');
+      $('logFilter').innerHTML = '';
+      loadSuper();
+    } catch (err) { flash('cMsg', err.message, 'err'); }
+  };
+
+  function statusPill(s) {
+    const cls = { 'Faol': 'ok', 'Yangi': 'ok', 'Faol emas': 'warn', 'Ishlatmayapti': 'bad', "O'chirilgan": 'grey' }[s] || 'grey';
+    return '<span class="pill ' + cls + '">' + esc(s) + '</span>';
+  }
+
+  async function loadSuper() {
+    try {
+      const o = await api('/super/overview');
+      $('sTiles').innerHTML = [
+        [o.activeCenters + ' / ' + o.centers, 'Faol servislar'],
+        [o.totalRecords, 'Jami kiritilgan ishlar'],
+        [o.returnRatePct == null ? '—' : o.returnRatePct + '%', 'Mijozlar qaytib kelishi']
+      ].map(([v, l]) => '<div class="tile"><b>' + esc(v) + '</b><span>' + l + '</span></div>').join('');
+
+      $('centers').innerHTML = o.list.length ? o.list.map(c => {
+        const s = c.stats;
+        const last = s.lastActivity ? fmt(s.lastActivity) + ' (' + c.inactiveDays + ' kun oldin)' : 'hali yo\'q';
+        return '<div class="item" id="center-' + c.id + '">' +
+          '<div class="item-top"><div><div class="item-title">' + esc(c.name) + '</div>' +
+          '<div class="small">' + esc([c.address, c.phoneDisplay].filter(Boolean).join(' · ')) + '</div>' +
+          '<div class="small">Direktor: ' + esc(c.directorName || '—') + (c.directorUsername ? ' (' + esc(c.directorUsername) + ')' : '') + ' · xodimlar: ' + c.staffCount + '</div></div>' + statusPill(c.status) + '</div>' +
+          '<div class="statline small"><span>Ishlar: <b>' + s.totalRecords + '</b></span><span>30 kunda: <b>' + s.last30Days + '</b></span>' +
+          '<span>Oxirgi faollik: <b>' + last + '</b></span><span>Mijozlar: <b>' + s.customers + '</b></span></div>' +
+          '<div class="statline small"><span>Vaqti kelgan: <b>' + s.due + '</b></span><span style="color:var(--ok)">Qaytib kelgan: <b>' + s.returned + '</b></span>' +
+          '<span style="color:var(--warn)">Boshqa joyga: <b>' + s.elsewhere + '</b></span><span style="color:var(--bad)">Kelmagan: <b>' + s.missing + '</b></span>' +
+          (s.returnRatePct != null ? '<span>Qaytish: <b>' + s.returnRatePct + '%</b></span>' : '') + '</div>' +
+          '<div class="btns">' +
+          ((s.elsewhere + s.missing) ? '<button class="btn-sm" type="button" data-missed="' + c.id + '">Kelmaganlar va sababi</button>' : '') +
+          '<button class="btn-ghost btn-sm" type="button" data-toggle="' + c.id + '" data-active="' + c.active + '">' + (c.active ? 'O\'chirish' : 'Yoqish') + '</button>' +
+          '<button class="btn-ghost btn-sm" type="button" data-pw="' + c.id + '">Direktor parolini tiklash</button>' +
+          '</div><div class="pwslot"></div><div class="missedslot"></div></div>';
+      }).join('') : '<div class="empty">Hali servis qo\'shilmagan. «+ Servis qo\'shish» tugmasini bosing.</div>';
+    } catch (err) { }
+  }
+
+  // ================= TUGMALAR =================
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    const d = b.dataset;
+
+    if (d.tab) { openTab(d.tab); return; }
+
+    if (d.ready) {
+      b.disabled = true;
+      try {
+        const r = await api('/center/records/' + d.ready + '/ready', { method: 'POST' });
+        b.textContent = r.delivered ? 'Yuborildi ✓' : 'Yetkazilmadi — qo\'ng\'iroq qiling';
+        setTimeout(loadWork, 1200);
+      } catch (err) { b.textContent = err.message; setTimeout(() => { b.disabled = false; b.textContent = '✅ Tayyor, keling'; }, 3000); }
+      return;
+    }
+    if (d.copy) {
+      try { await navigator.clipboard.writeText(d.copy); b.textContent = 'Nusxalandi ✓'; }
+      catch (err) { b.outerHTML = '<input readonly value="' + esc(d.copy) + '" onclick="this.select()">'; }
+      return;
+    }
+
+    // Direktor: xodimlar
+    if (d.block) {
+      try { await api('/center/staff/' + d.block, { method: 'PATCH', body: JSON.stringify({ blocked: d.to === 'true' }) }); loadStaff(); }
+      catch (err) { flash('staffMsg', err.message, 'err'); }
+      return;
+    }
+    if (d.spw) { $('spw-' + d.spw).classList.toggle('hidden'); return; }
+    if (d.spwsave) {
+      const input = b.parentElement.querySelector('input');
+      try {
+        await api('/center/staff/' + d.spwsave, { method: 'PATCH', body: JSON.stringify({ newPassword: input.value }) });
+        flash('staffMsg', 'Parol yangilandi. Xodim qaytadan kirishi kerak.');
+        loadStaff();
+      } catch (err) { flash('staffMsg', err.message, 'err'); }
+      return;
+    }
+
+    // Super admin
+    if (d.missed) {
+      const slot = $('center-' + d.missed).querySelector('.missedslot');
+      if (slot.innerHTML) { slot.innerHTML = ''; return; }
+      try {
+        const list = await api('/super/centers/' + d.missed + '/missed');
+        slot.innerHTML = '<div class="missed">' + (list.length ? list.map(x =>
+          '<div class="row-m"><div><b>' + esc(x.plateDisplay) + '</b> · ' + esc(x.ownerName) + ' · ' + esc(x.serviceName) +
+          ' <span class="small">(muddat ' + fmt(x.nextDate) + (x.daysOverdue ? ', ' + x.daysOverdue + ' kun o\'tdi' : '') + ')</span></div>' +
+          '<div class="reason">' + esc(x.reason) + '</div><div class="small">' + esc(x.hint) + '</div>' +
+          '<div>' + telLink(x.phone, x.phoneDisplay) + '</div></div>').join('') : '<div class="empty">Kelmagan mijoz yo\'q</div>') + '</div>';
+      } catch (err) { slot.innerHTML = '<div class="msg show err">' + esc(err.message) + '</div>'; }
+      return;
+    }
+    if (d.toggle) {
+      const active = d.active === 'true';
+      if (active && d.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Rostdan o\'chirasizmi? Yana bosing'; return; }
+      try { await api('/super/centers/' + d.toggle, { method: 'PATCH', body: JSON.stringify({ active: !active }) }); loadSuper(); }
+      catch (err) { flash('cMsg', err.message, 'err'); }
+      return;
+    }
+    if (d.pw) {
+      const slot = $('center-' + d.pw).querySelector('.pwslot');
+      slot.innerHTML = slot.innerHTML ? '' : '<div class="inline"><input type="text" placeholder="Yangi parol, kamida 8 belgi" autocomplete="off"><button class="btn-sm" type="button" data-pwsave="' + d.pw + '">Saqlash</button></div>';
+      return;
+    }
+    if (d.pwsave) {
+      const input = b.parentElement.querySelector('input');
+      try {
+        await api('/super/centers/' + d.pwsave, { method: 'PATCH', body: JSON.stringify({ newPassword: input.value }) });
+        b.parentElement.innerHTML = '<span class="small" style="color:var(--ok)">Parol yangilandi. Direktor qaytadan kirishi kerak.</span>';
+      } catch (err) { flash('cMsg', err.message, 'err'); }
+    }
+  });
+
+  start();
+})();
+</script>
+</body>
+</html>
