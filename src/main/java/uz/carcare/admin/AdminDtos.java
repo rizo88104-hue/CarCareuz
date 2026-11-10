@@ -117,7 +117,29 @@ public final class AdminDtos {
 
     // ---------- Javoblar ----------
 
-    public record MeDto(String username, String fullName, String role, String roleLabel, String centerName) {
+    /** subscription — servis xodimlari uchun obuna holati (super adminga null). */
+    public record MeDto(String username, String fullName, String role, String roleLabel, String centerName,
+                        SubscriptionInfo subscription) {
+    }
+
+    /**
+     * Obuna holati. state: ACTIVE — to'langan; EXPIRING — 7 kun ichida tugaydi; GRACE — tugagan, imtiyoz kunlari
+     * ichida; EXPIRED — bloklangan; NONE — muddat belgilanmagan. daysLeft manfiy — o'tib ketgan kunlar.
+     */
+    public record SubscriptionInfo(LocalDate until, Long daysLeft, String state, long monthlyPrice, int graceDays) {
+    }
+
+    public record SubscriptionPayRequest(Integer months, Long amount, @Size(max = 200, message = "{v.noteLong}") String note) {
+    }
+
+    public record SubscriptionSetRequest(LocalDate until, @Size(max = 200, message = "{v.noteLong}") String note) {
+    }
+
+    public record SubscriptionPaymentRow(Long id, Instant at, long amount, int months, LocalDate periodFrom, LocalDate periodTo,
+                                         String note, String recordedBy) {
+    }
+
+    public record SubscriptionDetail(SubscriptionInfo info, List<SubscriptionPaymentRow> payments) {
     }
 
     /** Telefon raqami faqat direktor va administratorga ko'rsatiladi (ustaga null). */
@@ -205,12 +227,14 @@ public final class AdminDtos {
     public record CenterDto(
             Long id, String name, String address, String phoneDisplay,
             String directorName, String directorUsername, long staffCount,
-            boolean active, String status, Integer inactiveDays, CenterStats stats
+            boolean active, String status, Integer inactiveDays, CenterStats stats,
+            SubscriptionInfo subscription
     ) {
     }
 
+    /** expiredCenters — obunasi tugab bloklangan servislar; subscriptionPrice — oylik narx (so'm). */
     public record SuperOverview(int centers, int activeCenters, int totalRecords, Integer returnRatePct,
-                                List<CenterDto> list) {
+                                List<CenterDto> list, int expiredCenters, long subscriptionPrice) {
     }
 
     /** Qaytib kelmagan mijoz va sababi. */

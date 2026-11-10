@@ -296,6 +296,19 @@ Sadoqat API (direktor va administrator; `PUT settings`, `issue-all`, `adjust` �
 | POST | `/api/admin/center/customers/{id}/loyalty/card` | Karta ochish |
 | POST | `/api/admin/center/customers/{id}/loyalty/adjust` | Ball qo'shish/ayirish |
 
+### Obuna: servislardan oylik to'lov (abonement)
+- Narx `SUBSCRIPTION_PRICE` (standart **200 000 so'm/oy**), yangi servisga sinov `SUBSCRIPTION_TRIAL_DAYS`
+  (14 kun), muddat tugagach imtiyoz `SUBSCRIPTION_GRACE_DAYS` (3 kun). Eski bazadagi servislarga ilova
+  ishga tushganda sinov muddati beriladi.
+- **Super admin → Avtoservislar**: har servisda obuna holati (📗 to'langan / 🟡 7 kun ichida tugaydi /
+  🔴 tugagan, imtiyoz / 🔴 bloklangan) va **«💳 Obuna to'lovi»**: oylar soni (summa avtomatik = oylar × narx,
+  o'zgartirish mumkin), izoh → muddat `max(bugun, oldingi muddat)` dan uzayadi, to'lov tarixga yoziladi.
+  Muddatni qo'lda belgilash ham mumkin (sinovni uzaytirish). Obunasi tugaganlar ro'yxat boshida.
+- **Servis panelida**: muddatga 7 kun qolganda va imtiyoz kunlarida yuqorida ogohlantirish. Imtiyoz
+  o'tgach **servisning barcha xodimlari kira olmaydi** (sessiyalar ham rad etiladi), kirishda sabab va
+  narx ko'rsatiladi. Super admin to'lovni qabul qilgach kirish darhol ochiladi.
+- API: `GET/POST/PATCH /api/admin/super/centers/{id}/subscription`.
+
 ### Mijozni Telegramga ulash: QR kod va chek
 Ko'pchilik mijoz havolani o'zi ochmaydi — shuning uchun ulash servis kassasida bo'ladi:
 - **ish saqlanganda** ekranda **QR kod** chiqadi (`t.me/Bot?start=KALIT`). Mijoz telefon kamerasi bilan

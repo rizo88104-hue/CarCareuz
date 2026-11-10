@@ -169,6 +169,8 @@
       <button class="btn-ghost btn-sm" id="logout" type="button">Chiqish</button>
     </div>
   </div>
+  <!-- Obuna (oylik to'lov) ogohlantirishi — servis xodimlariga, muddat yaqinlashganda yoki o'tganda -->
+  <div id="subBanner" class="result warn hidden" style="margin-bottom:14px"></div>
   <div id="pwCard" class="card hidden" style="max-width:420px">
     <h2>Parolni o'zgartirish</h2>
     <div id="pwMsg" class="msg"></div>
@@ -601,10 +603,23 @@
     show('vTop', true);
     $('topTitle').textContent = me.role === 'SUPER_ADMIN' ? 'Super admin' : me.centerName;
     $('who').textContent = me.fullName + ' · ' + me.roleLabel;
+    renderSubBanner(me.subscription);
     const tabs = TABS[me.role] || [];
     $('tabs').innerHTML = tabs.map(([k, l]) => '<button type="button" data-tab="' + k + '">' + l + '</button>').join('');
     show('tabs', tabs.length > 1);
     openTab(tabs[0][0]);
+  }
+
+  /** Servis xodimiga obuna holati: 7 kun qolganda yoki imtiyoz kunlarida ogohlantirish. */
+  function renderSubBanner(s) {
+    const b = $('subBanner');
+    if (!s || !s.until || s.state === 'ACTIVE' || s.state === 'NONE') { show('subBanner', false); return; }
+    const price = sum(s.monthlyPrice);
+    b.className = 'result ' + (s.state === 'EXPIRING' ? 'warn' : 'warn');
+    b.innerHTML = s.state === 'EXPIRING'
+      ? '⏳ <b>Obuna ' + fmt(s.until) + ' gacha</b> · ' + s.daysLeft + ' kun qoldi. Oylik to\'lov ' + price + '. Super adminga to\'lab, muddatni uzaytiring — aks holda panel yopiladi.'
+      : '❗ <b>Obuna muddati ' + fmt(s.until) + ' da tugadi.</b> Imtiyoz kunlari: yana ' + (s.graceDays + s.daysLeft) + ' kun, keyin panelga kirish yopiladi. Oylik to\'lov ' + price + ' — super adminga to\'lang.';
+    show('subBanner', true);
   }
 
   function openTab(k) {
@@ -1836,10 +1851,12 @@
     loadTwoFactor();
     try {
       const o = await api('/super/overview');
+      subPrice = o.subscriptionPrice || 200000;
       $('sTiles').innerHTML = [
         [o.activeCenters + ' / ' + o.centers, 'Faol servislar'],
         [o.totalRecords, 'Jami kiritilgan ishlar'],
-        [o.returnRatePct == null ? '—' : o.returnRatePct + '%', 'Mijozlar qaytib kelishi']
+        [o.returnRatePct == null ? '—' : o.returnRatePct + '%', 'Mijozlar qaytib kelishi'],
+        [o.expiredCenters, 'Obunasi tugagan (bloklangan)']
       ].map(([v, l]) => '<div class="tile"><b>' + esc(v) + '</b><span>' + l + '</span></div>').join('');
 
       $('centers').innerHTML = o.list.length ? o.list.map(c => {
@@ -1849,6 +1866,7 @@
           '<div class="item-top"><div><div class="item-title">' + esc(c.name) + '</div>' +
           '<div class="small">' + esc([c.address, c.phoneDisplay].filter(Boolean).join(' · ')) + '</div>' +
           '<div class="small">Direktor: ' + esc(c.directorName || '—') + (c.directorUsername ? ' (' + esc(c.directorUsername) + ')' : '') + ' · xodimlar: ' + c.staffCount + '</div></div>' + statusPill(c.status) + '</div>' +
+          '<div class="small" style="margin-top:6px">💳 Obuna: ' + subPill(c.subscription) + '</div>' +
           '<div class="statline small"><span>Ishlar: <b>' + s.totalRecords + '</b></span><span>30 kunda: <b>' + s.last30Days + '</b></span>' +
           '<span>Oxirgi faollik: <b>' + last + '</b></span><span>Mijozlar: <b>' + s.customers + '</b></span></div>' +
           '<div class="statline small"><span>Vaqti kelgan: <b>' + s.due + '</b></span><span style="color:var(--ok)">Qaytib kelgan: <b>' + s.returned + '</b></span>' +
@@ -1858,10 +1876,68 @@
           ((s.elsewhere + s.missing) ? '<button class="btn-sm" type="button" data-missed="' + c.id + '">Kelmaganlar va sababi</button>' : '') +
           '<button class="btn-ghost btn-sm" type="button" data-toggle="' + c.id + '" data-active="' + c.active + '">' + (c.active ? 'O\'chirish' : 'Yoqish') + '</button>' +
           '<button class="btn-ghost btn-sm" type="button" data-pw="' + c.id + '">Direktor parolini tiklash</button>' +
-          '</div><div class="pwslot"></div><div class="missedslot"></div></div>';
+          '<button class="btn-sm" type="button" data-sub="' + c.id + '">💳 Obuna to\'lovi</button>' +
+          '</div><div class="pwslot"></div><div class="missedslot"></div><div class="subslot"></div></div>';
       }).join('') : '<div class="empty">Hali servis qo\'shilmagan. «+ Servis qo\'shish» tugmasini bosing.</div>';
     } catch (err) { }
   }
+
+  // ---------- Obuna (oylik to'lov) ----------
+  let subPrice = 200000;
+  function subPill(s) {
+    if (!s || !s.until) return '<span class="pill grey">belgilanmagan</span>';
+    const d = fmt(s.until);
+    if (s.state === 'EXPIRED') return '<span class="pill bad">Tugagan · ' + d + ' · bloklangan</span>';
+    if (s.state === 'GRACE') return '<span class="pill bad">Tugagan · ' + d + ' · imtiyoz: ' + (s.graceDays + s.daysLeft) + ' kun</span>';
+    if (s.state === 'EXPIRING') return '<span class="pill warn">' + d + ' gacha · ' + s.daysLeft + ' kun qoldi</span>';
+    return '<span class="pill ok">' + d + ' gacha · ' + s.daysLeft + ' kun</span>';
+  }
+  async function openSub(centerId) {
+    const slot = $('center-' + centerId).querySelector('.subslot');
+    if (slot.innerHTML) { slot.innerHTML = ''; return; }
+    slot.innerHTML = '<div class="missed">Yuklanmoqda…</div>';
+    try {
+      const d = await api('/super/centers/' + centerId + '/subscription');
+      renderSub(slot, centerId, d);
+    } catch (err) { slot.innerHTML = '<div class="msg show err">' + esc(err.message) + '</div>'; }
+  }
+  function renderSub(slot, centerId, d) {
+    const s = d.info;
+    slot.innerHTML = '<div class="missed">' +
+      '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center"><div><b>💳 Obuna</b> · oylik to\'lov <b>' + sum(subPrice) + '</b><div class="small" style="margin-top:4px">Holati: ' + subPill(s) + '</div></div></div>' +
+      '<form class="subPay" data-center="' + centerId + '" novalidate style="margin-top:10px"><div class="row">' +
+      '<div class="field"><label>Necha oy</label><select name="months">' + [1, 2, 3, 6, 12].map(m => '<option value="' + m + '"' + (m === 1 ? ' selected' : '') + '>' + m + ' oy</option>').join('') + '</select></div>' +
+      '<div class="field"><label>Summa, so\'m</label><input name="amount" inputmode="numeric" autocomplete="off" value="' + subPrice.toLocaleString('ru-RU').replace(/ /g, ' ') + '"></div></div>' +
+      '<div class="field"><label>Izoh</label><input name="note" maxlength="200" placeholder="masalan: naqd, Click, o\'tkazma"></div>' +
+      '<div class="hint" style="margin-bottom:8px">Muddat ' + (s.until && s.daysLeft >= 0 ? fmt(s.until) + ' dan' : 'bugundan') + ' boshlab uzayadi. To\'lov qabul qilingach bloklangan servis darhol ochiladi.</div>' +
+      '<div class="btns"><button class="btn-sm" type="submit">💳 To\'lovni qabul qilish</button></div></form>' +
+      '<form class="subSet" data-center="' + centerId + '" novalidate style="margin-top:10px;border-top:1px dashed var(--line);padding-top:10px"><div class="row">' +
+      '<div class="field"><label>Muddatni qo\'lda belgilash</label><input name="until" type="date" value="' + esc(s.until || '') + '"></div>' +
+      '<div class="field"><label>Sabab</label><input name="note" maxlength="200" placeholder="masalan: sinov uzaytirildi"></div></div>' +
+      '<div class="btns"><button class="btn-ghost btn-sm" type="submit">Saqlash</button></div></form>' +
+      '<div style="margin-top:10px"><b>To\'lovlar tarixi</b>' + (d.payments.length ? d.payments.map(p =>
+        '<div class="logrow"><time>' + esc(fmtTime(p.at)) + '</time><div><b>' + sum(p.amount) + '</b> <span class="meta">· ' + p.months + ' oy · ' + fmt(p.periodFrom) + ' — ' + fmt(p.periodTo) + ' · ' + esc(p.recordedBy || '') + '</span>' +
+        (p.note ? '<div class="small">' + esc(p.note) + '</div>' : '') + '</div></div>').join('') : '<div class="small" style="margin-top:4px">Hali to\'lov yo\'q</div>') + '</div></div>';
+    const f = slot.querySelector('.subPay');
+    const months = f.querySelector('[name=months]'), amount = f.querySelector('[name=amount]');
+    months.onchange = () => { amount.value = (Number(months.value) * subPrice).toLocaleString('ru-RU').replace(/ /g, ' '); };
+    amount.addEventListener('input', () => group(amount));
+  }
+  document.addEventListener('submit', async (e) => {
+    const f = e.target;
+    if (!f.classList || !(f.classList.contains('subPay') || f.classList.contains('subSet'))) return;
+    e.preventDefault();
+    const id = f.dataset.center, slot = f.closest('.subslot');
+    const btn = f.querySelector('button[type=submit]'); btn.disabled = true;
+    try {
+      const d = f.classList.contains('subPay')
+        ? await api('/super/centers/' + id + '/subscription', { method: 'POST', body: JSON.stringify({ months: Number(f.months.value), amount: num(f.amount.value), note: f.note.value || null }) })
+        : await api('/super/centers/' + id + '/subscription', { method: 'PATCH', body: JSON.stringify({ until: f.until.value || null, note: f.note.value || null }) });
+      renderSub(slot, id, d);
+      flash('cMsg', f.classList.contains('subPay') ? 'To\'lov qabul qilindi, muddat uzaytirildi' : 'Obuna muddati o\'zgartirildi');
+      setTimeout(loadSuper, 1500); // ro'yxatdagi holat belgisi yangilanadi
+    } catch (err) { flash('cMsg', err.message, 'err'); btn.disabled = false; }
+  });
 
   // ================= TUGMALAR =================
   document.addEventListener('click', async (e) => {
@@ -1928,6 +2004,7 @@
       } catch (err) { slot.innerHTML = '<div class="msg show err">' + esc(err.message) + '</div>'; }
       return;
     }
+    if (d.sub) { openSub(d.sub); return; }
     if (d.toggle) {
       const active = d.active === 'true';
       if (active && d.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Rostdan o\'chirasizmi? Yana bosing'; return; }

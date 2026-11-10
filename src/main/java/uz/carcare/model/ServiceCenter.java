@@ -3,6 +3,7 @@ package uz.carcare.model;
 import jakarta.persistence.*;
 
 import java.time.Instant;
+import java.time.LocalDate;
 
 /** Avtoservis (super admin qo'shadi). */
 @Entity
@@ -27,6 +28,12 @@ public class ServiceCenter {
     @Column(nullable = false)
     private boolean active = true;
 
+    /**
+     * Obuna (oylik to'lov) qaysi kungacha to'langan. Shu kun + imtiyoz kunlari o'tgach servis xodimlari
+     * kira olmaydi. null — hali belgilanmagan (ishga tushganda sinov muddati beriladi).
+     */
+    private LocalDate subscriptionUntil;
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -39,5 +46,7 @@ public class ServiceCenter {
     public void setPhone(String phone) { this.phone = phone; }
     public boolean isActive() { return active; }
     public void setActive(boolean active) { this.active = active; }
+    public LocalDate getSubscriptionUntil() { return subscriptionUntil; }
+    public void setSubscriptionUntil(LocalDate subscriptionUntil) { this.subscriptionUntil = subscriptionUntil; }
     public Instant getCreatedAt() { return createdAt; }
 }

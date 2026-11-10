@@ -53,13 +53,15 @@ public class AdminService {
     private final SmsService sms;
     private final AppProperties app;
     private final LoyaltyService loyalty;
+    private final SubscriptionService subscription;
 
     public AdminService(CarRepository cars, ServiceRecordRepository records, ServiceCenterRepository centers,
                         StaffUserRepository staff, AdminSessionRepository sessions, ActivityLogRepository logs,
                         PaymentRepository payments, CustomerNoteRepository customerNotes,
                         AdminAuthService auth, AuditService audit, ReminderService reminders, MileageService mileage,
                         TelegramClient telegram, TelegramProperties telegramProps, SmsService sms,
-                        AppProperties app, LoyaltyService loyalty) {
+                        AppProperties app, LoyaltyService loyalty, SubscriptionService subscription) {
+        this.subscription = subscription;
         this.telegramProps = telegramProps;
         this.sms = sms;
         this.mileage = mileage;
@@ -460,6 +462,7 @@ public class AdminService {
         LocalDate today = today();
         List<CenterDto> list = new ArrayList<>();
         int total = 0, due = 0, returned = 0, active = 0;
+        int expired = 0;
         for (ServiceCenter c : centers.findAllByOrderByNameAsc()) {
             CenterDto dto = centerDto(c, records.findAllForCenter(c), today);
             list.add(dto);
@@ -467,9 +470,22 @@ public class AdminService {
             due += dto.stats().due();
             returned += dto.stats().returned();
             if ("Faol".equals(dto.status())) active++;
+            if (c.isActive() && "EXPIRED".equals(dto.subscription().state())) expired++;
         }
-        list.sort(Comparator.comparing((CenterDto d) -> statusOrder(d.status())).thenComparing(CenterDto::name));
-        return new SuperOverview(list.size(), active, total, due > 0 ? Math.round(returned * 100f / due) : null, list);
+        // Obunasi tugagan/tugayotgan servislar avval, keyin faollik holati bo'yicha
+        list.sort(Comparator.comparing((CenterDto d) -> subOrder(d.subscription().state()))
+                .thenComparing(d -> statusOrder(d.status())).thenComparing(CenterDto::name));
+        return new SuperOverview(list.size(), active, total, due > 0 ? Math.round(returned * 100f / due) : null, list,
+                expired, app.subscriptionPrice());
+    }
+
+    private static int subOrder(String state) {
+        return switch (state) {
+            case "EXPIRED" -> 0;
+            case "GRACE" -> 1;
+            case "EXPIRING" -> 2;
+            default -> 3;
+        };
     }
 
     @Transactional
@@ -482,6 +498,7 @@ public class AdminService {
         c.setName(trim(req.name()));
         c.setAddress(trim(req.address()));
         c.setPhone(req.phone() == null || req.phone().isBlank() ? null : normalizePhone(req.phone()));
+        c.setSubscriptionUntil(subscription.trialUntil()); // yangi servisga sinov muddati
         centers.save(c);
 
         StaffUser u = new StaffUser();
@@ -661,7 +678,7 @@ public class AdminService {
         Optional<StaffUser> director = staff.findFirstByCenterAndRoleOrderByIdAsc(c, Role.DIRECTOR);
         return new CenterDto(c.getId(), c.getName(), c.getAddress(), prettyPhone(c.getPhone()),
                 director.map(StaffUser::displayName).orElse(null), director.map(StaffUser::getUsername).orElse(null),
-                staff.countByCenter(c), c.isActive(), status, idle, s);
+                staff.countByCenter(c), c.isActive(), status, idle, s, subscription.info(c));
     }
 
     private static int statusOrder(String status) {

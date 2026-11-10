@@ -12,7 +12,11 @@ public record AppProperties(
         @DefaultValue("Asia/Tashkent") String zone,
         @DefaultValue("7") int reminderDaysBefore,
         /** Keyingi probegga shuncha km qolganda eslatish. */
-        @DefaultValue("500") int reminderKmBefore
+        @DefaultValue("500") int reminderKmBefore,
+        /** Avtoservis obunasi: oylik narx (so'm), yangi servisga sinov kunlari, muddat tugagach imtiyoz kunlari. */
+        @DefaultValue("200000") long subscriptionPrice,
+        @DefaultValue("14") int subscriptionTrialDays,
+        @DefaultValue("3") int subscriptionGraceDays
 ) {
     public ZoneId zoneId() {
         return ZoneId.of(zone);

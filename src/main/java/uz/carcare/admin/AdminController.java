@@ -28,10 +28,12 @@ public class AdminController {
 
     private final AdminAuthService auth;
     private final AdminService service;
+    private final SubscriptionService subscriptionService;
 
-    public AdminController(AdminAuthService auth, AdminService service) {
+    public AdminController(AdminAuthService auth, AdminService service, SubscriptionService subscriptionService) {
         this.auth = auth;
         this.service = service;
+        this.subscriptionService = subscriptionService;
     }
 
     // ---------- Kirish ----------
@@ -56,7 +58,7 @@ public class AdminController {
     @GetMapping("/me")
     public MeDto me(@RequestHeader(value = AUTH, required = false) String h) {
         AdminPrincipal p = auth.require(h);
-        return new MeDto(p.username(), p.fullName(), p.role().name(), p.role().label(), p.centerName());
+        return new MeDto(p.username(), p.fullName(), p.role().name(), p.role().label(), p.centerName(), auth.subscriptionOf(p));
     }
 
     @PostMapping("/password")
@@ -154,6 +156,28 @@ public class AdminController {
     public CenterDto updateCenter(@RequestHeader(value = AUTH, required = false) String h,
                                   @PathVariable Long id, @RequestBody CenterUpdateRequest req) {
         return service.updateCenter(auth.requireSuper(h), id, req);
+    }
+
+    // ---------- Obuna (oylik to'lov) ----------
+
+    @GetMapping("/super/centers/{id}/subscription")
+    public SubscriptionDetail subscription(@RequestHeader(value = AUTH, required = false) String h, @PathVariable Long id) {
+        auth.requireSuper(h);
+        return subscriptionService.detail(id);
+    }
+
+    /** To'lov qabul qilish: muddat N oyga uzayadi (standart summa = oylar × oylik narx). */
+    @PostMapping("/super/centers/{id}/subscription")
+    public SubscriptionDetail paySubscription(@RequestHeader(value = AUTH, required = false) String h, @PathVariable Long id,
+                                              @Valid @RequestBody SubscriptionPayRequest req) {
+        return subscriptionService.pay(auth.requireSuper(h), id, req);
+    }
+
+    /** Muddatni qo'lda o'zgartirish (sinovni uzaytirish va h.k.). */
+    @PatchMapping("/super/centers/{id}/subscription")
+    public SubscriptionDetail setSubscription(@RequestHeader(value = AUTH, required = false) String h, @PathVariable Long id,
+                                              @Valid @RequestBody SubscriptionSetRequest req) {
+        return subscriptionService.setUntil(auth.requireSuper(h), id, req);
     }
 
     @GetMapping("/super/centers/{id}/missed")

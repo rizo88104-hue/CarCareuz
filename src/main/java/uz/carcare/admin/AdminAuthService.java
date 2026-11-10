@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import uz.carcare.util.IpAllowList;
+import uz.carcare.admin.AdminDtos.SubscriptionInfo;
 import uz.carcare.i18n.I18n;
 import uz.carcare.i18n.LangContext;
 import uz.carcare.model.AdminSession;
@@ -42,6 +43,7 @@ public class AdminAuthService implements ApplicationRunner {
     private final AdminSessionRepository sessions;
     private final AuditService audit;
     private final AdminTwoFactorService twoFactor;
+    private final SubscriptionService subscription;
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
     private final String superUsername;
     private final String superPassword;
@@ -49,7 +51,7 @@ public class AdminAuthService implements ApplicationRunner {
     private final IpAllowList superIps;
 
     public AdminAuthService(StaffUserRepository staff, AdminSessionRepository sessions, AuditService audit,
-                            AdminTwoFactorService twoFactor,
+                            AdminTwoFactorService twoFactor, SubscriptionService subscription,
                             @Value("${superadmin.username:superadmin}") String superUsername,
                             @Value("${superadmin.password:}") String superPassword,
                             @Value("${superadmin.allowed-ips:}") String superAllowedIps) {
@@ -57,6 +59,7 @@ public class AdminAuthService implements ApplicationRunner {
         this.sessions = sessions;
         this.audit = audit;
         this.twoFactor = twoFactor;
+        this.subscription = subscription;
         this.superUsername = superUsername;
         this.superPassword = superPassword;
         this.superIps = new IpAllowList(superAllowedIps);
@@ -252,6 +255,18 @@ public class AdminAuthService implements ApplicationRunner {
         if (u.getRole().isCenterRole() && (u.getCenter() == null || !u.getCenter().isActive())) {
             throw forbidden(I18n.t("err.auth.centerDisabled"));
         }
+        // Obuna (oylik to'lov) muddati + imtiyoz kunlari o'tgan — servisning barcha xodimlari bloklanadi
+        if (u.getRole().isCenterRole() && subscription.isBlocked(u.getCenter())) {
+            throw forbidden(I18n.t("err.auth.subscriptionExpired", Formats.money(subscription.info(u.getCenter()).monthlyPrice()),
+                    Formats.date(u.getCenter().getSubscriptionUntil())));
+        }
+    }
+
+    /** /me uchun: servis xodimiga obuna holati (super adminga null). */
+    @Transactional(readOnly = true)
+    public SubscriptionInfo subscriptionOf(AdminPrincipal p) {
+        if (p.centerId() == null) return null;
+        return staff.findById(p.staffId()).map(StaffUser::getCenter).filter(c -> c != null).map(subscription::info).orElse(null);
     }
 
     private static ApiException unauthorized() {

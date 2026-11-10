@@ -297,7 +297,20 @@
     'Faol emas': 'Неактивен', 'Ishlatmayapti': 'Не использует', 'Kelmaganlar va sababi': 'Не приехавшие и причина', 'Yoqish': 'Включить', 'Direktor parolini tiklash': 'Сбросить пароль директора',
     "Hali servis qo'shilmagan. «+ Servis qo'shish» tugmasini bosing.": 'Сервисов ещё нет. Нажмите «+ Добавить сервис».',
     "(muddat {0}, {1} kun o'tdi)": '(срок {0}, просрочено {1} дн.)', '(muddat {0})': '(срок {0})', "Kelmagan mijoz yo'q": 'Не приехавших нет',
-    "Rostdan o'chirasizmi? Yana bosing": 'Точно отключить? Нажмите ещё раз', 'Parol yangilandi. Direktor qaytadan kirishi kerak.': 'Пароль обновлён. Директору нужно войти заново.'
+    "Rostdan o'chirasizmi? Yana bosing": 'Точно отключить? Нажмите ещё раз', 'Parol yangilandi. Direktor qaytadan kirishi kerak.': 'Пароль обновлён. Директору нужно войти заново.',
+
+    // ---------- admin: obuna (oylik to'lov) ----------
+    'Obunasi tugagan (bloklangan)': 'Подписка истекла (заблокированы)', '💳 Obuna:': '💳 Подписка:', "💳 Obuna to'lovi": '💳 Оплата подписки', '💳 Obuna': '💳 Подписка',
+    'belgilanmagan': 'не задана', 'Tugagan · {0} · bloklangan': 'Истекла · {0} · заблокирован', 'Tugagan · {0} · imtiyoz: {1} kun': 'Истекла · {0} · льготный период: {1} дн.',
+    '{0} gacha · {1} kun qoldi': 'до {0} · осталось {1} дн.', '{0} gacha · {1} kun': 'до {0} · {1} дн.',
+    "· oylik to'lov": '· ежемесячная оплата', 'Holati:': 'Статус:', 'Necha oy': 'Сколько месяцев', '{0} oy': '{0} мес.',
+    "masalan: naqd, Click, o'tkazma": 'например: наличные, Click, перевод',
+    "Muddat {0} dan boshlab uzayadi. To'lov qabul qilingach bloklangan servis darhol ochiladi.": 'Срок продлится начиная с {0}. После приёма оплаты заблокированный сервис откроется сразу.',
+    "Muddat bugundan boshlab uzayadi. To'lov qabul qilingach bloklangan servis darhol ochiladi.": 'Срок продлится начиная с сегодня. После приёма оплаты заблокированный сервис откроется сразу.',
+    "💳 To'lovni qabul qilish": '💳 Принять оплату', "Muddatni qo'lda belgilash": 'Задать срок вручную', 'masalan: sinov uzaytirildi': 'например: продлён пробный период',
+    '· {0} oy · {1} — {2} · {3}': '· {0} мес. · {1} — {2} · {3}', "To'lov qabul qilindi, muddat uzaytirildi": 'Оплата принята, срок продлён', "Obuna muddati o'zgartirildi": 'Срок подписки изменён',
+    '⏳': '⏳', "Obuna {0} gacha": 'Подписка до {0}', "· {0} kun qoldi. Oylik to'lov {1} so'm. Super adminga to'lab, muddatni uzaytiring — aks holda panel yopiladi.": '· осталось {0} дн. Ежемесячная оплата {1} сум. Оплатите супер-админу и продлите срок — иначе панель закроется.',
+    'Obuna muddati {0} da tugadi.': 'Срок подписки истёк {0}.', "Imtiyoz kunlari: yana {0} kun, keyin panelga kirish yopiladi. Oylik to'lov {1} so'm — super adminga to'lang.": 'Льготный период: ещё {0} дн., затем вход в панель закроется. Ежемесячная оплата {1} сум — оплатите супер-админу.'
   };
 
   /** Qolip bo'lmagan, lekin tarkibida uchraydigan qismlar — oxirgi chora (butun so'z sifatida). */
