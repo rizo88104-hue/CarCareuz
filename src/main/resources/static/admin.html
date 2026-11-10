@@ -101,6 +101,30 @@
     .pts-minus { color: var(--bad); font-weight: 700; }
 
     [hidden] { display: none !important; }
+
+    /* Mijozni Telegramga ulash: QR kod kartasi */
+    .qrbox { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 10px; padding: 12px; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+    .qrbox img { width: 150px; height: 150px; image-rendering: pixelated; flex: none; }
+    .qrbox .qrtext { flex: 1; min-width: 180px; font-size: 14px; }
+    .qrbox .qrtext b { display: block; margin-bottom: 4px; }
+    .qrbox .qrlink { font-family: ui-monospace, Consolas, monospace; font-size: 12px; word-break: break-all; color: var(--muted); }
+
+    /* Chek (58/80 mm termal printer). Ekranda ko'rinmaydi, faqat chop etilganda */
+    #receipt { display: none; }
+    @media print {
+      body > *:not(#receipt) { display: none !important; }
+      body { background: #fff !important; margin: 0; }
+      #receipt { display: block; width: 72mm; margin: 0 auto; padding: 2mm; font: 12px/1.35 ui-monospace, Consolas, monospace; color: #000; }
+      #receipt h1 { font-size: 16px; margin: 0 0 2px; text-align: center; }
+      #receipt .c { text-align: center; }
+      #receipt .hr { border-top: 1px dashed #000; margin: 6px 0; }
+      #receipt table { width: 100%; border-collapse: collapse; }
+      #receipt td { padding: 1px 0; vertical-align: top; }
+      #receipt td.r { text-align: right; white-space: nowrap; }
+      #receipt img { width: 42mm; height: 42mm; display: block; margin: 4px auto; image-rendering: pixelated; }
+      #receipt .small { font-size: 11px; }
+      @page { margin: 4mm; }
+    }
   </style>
 </head>
 <body class="has-scene scene-service">
@@ -292,6 +316,18 @@
   </div>
 
   <!-- To'lov / narx oynasi -->
+  <!-- Mijozni Telegramga ulash: QR va chek (oxirgi ishlar va profil tugmalaridan ochiladi) -->
+  <div id="qrModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="qrTitle"
+       style="position:fixed;inset:0;background:rgba(20,32,40,.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px">
+    <div class="card" style="width:min(520px,100%);max-height:90vh;overflow:auto;margin:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <h2 id="qrTitle" style="margin:0">Telegramga ulash</h2>
+        <button class="btn-ghost btn-sm" type="button" id="qrClose" aria-label="Yopish">✕</button>
+      </div>
+      <div id="qrBody" class="small" style="margin-top:8px">Yuklanmoqda…</div>
+    </div>
+  </div>
+
   <div id="payModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="payTitle"
        style="position:fixed;inset:0;background:rgba(20,32,40,.45);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px">
     <div class="card" style="width:min(460px,100%);max-height:90vh;overflow:auto;margin:0">
@@ -493,6 +529,9 @@
     </div>
   </div>
 </div>
+
+<!-- Chek — body ning bevosita farzandi: chop etishda faqat shu ko'rinadi (JS to'ldiradi) -->
+<div id="receipt" aria-hidden="true"></div>
 
 <script>
 (() => {
@@ -815,7 +854,16 @@
       const rec = r.record, warn = r.readyDelivered === false;
       let html = '<div class="result ' + (warn ? 'warn' : 'ok') + '">' + esc(r.message);
       if (warn) html += '<div class="btns">' + telLink(rec.phone, rec.phoneDisplay) + '</div>';
-      if (r.carCreated && rec.carUrl) html += '<div class="btns"><span class="small">Mijoz sahifasi:</span> <button class="btn-ghost btn-sm" type="button" data-copy="' + esc(rec.carUrl) + '">Havolani nusxalash</button></div>';
+      if (r.connect) {
+        lastReceipt = { connect: r.connect, records: r.records || [rec], when: new Date() };
+        // Ulanmagan mijozga QR darhol ko'rsatiladi; ulanganga ham chek chiqarish mumkin
+        if (!r.connect.telegramConnected) html += qrBoxHtml(r.connect);
+        html += '<div class="btns"><button class="btn-sm" type="button" data-print="last">🖨 Chek chiqarish (QR bilan)</button>' +
+          (r.connect.telegramConnected ? '' : '<button class="btn-ghost btn-sm" type="button" data-copy="' + esc(r.connect.telegramLink || r.connect.carUrl) + '">Ulash havolasini nusxalash</button>') +
+          (r.carCreated && rec.carUrl ? '<button class="btn-ghost btn-sm" type="button" data-copy="' + esc(rec.carUrl) + '">Mijoz sahifasi havolasi</button>' : '') + '</div>';
+      } else if (r.carCreated && rec.carUrl) {
+        html += '<div class="btns"><span class="small">Mijoz sahifasi:</span> <button class="btn-ghost btn-sm" type="button" data-copy="' + esc(rec.carUrl) + '">Havolani nusxalash</button></div>';
+      }
       $('saveResult').innerHTML = html + '</div>';
       resetForm();
       loadWork();
@@ -859,11 +907,86 @@
             (r.remaining > 0 ? ' · <b style="color:var(--bad)">qarz ' + sum(r.remaining) + '</b> (muddat ' + fmt(r.payDueDate) + ') ' +
               '<button class="btn-sm" type="button" data-pay="' + r.id + '" data-car="' + (r.carId || '') + '" data-rem="' + r.remaining + '" data-label="' + esc(r.plateDisplay + ' · ' + r.serviceName + ' · ' + r.ownerName) + '">💵 To\'lov</button>' : ' · to\'liq to\'langan') + '</div>') +
         (master ? '' : '<div class="btns">' +
-          (r.telegramConnected ? '<button class="btn-tg btn-sm" type="button" data-ready="' + r.id + '">✅ Tayyor, keling</button>' : '<span class="small">Telegram ulanmagan — qo\'ng\'iroq qiling</span>') +
+          (r.telegramConnected ? '<button class="btn-tg btn-sm" type="button" data-ready="' + r.id + '">✅ Tayyor, keling</button>'
+            : '<button class="btn-ghost btn-sm" type="button" data-qr="' + (r.carId || '') + '">📲 QR — Telegramga ulash</button>') +
+          (r.carId ? '<button class="btn-ghost btn-sm" type="button" data-receipt="' + r.id + '" data-qr-car="' + r.carId + '">🖨 Chek</button>' : '') +
           telLink(r.phone, r.phoneDisplay) +
           (r.readyNotifiedAt ? '<span class="small">Xabar yuborilgan: ' + esc(fmtTime(r.readyNotifiedAt)) + '</span>' : '') + '</div>') +
         '</div>').join('') : '<div class="empty">Hali ish kiritilmagan</div>';
     } catch (err) { }
+  }
+
+  // ================= MIJOZNI TELEGRAMGA ULASH: QR VA CHEK =================
+  // Mijoz o'zi ulanmaydi — shuning uchun ish saqlanganda QR ekranda ko'rsatiladi va chekka chiqariladi.
+  // QR t.me/Bot?start=TOKEN ga olib boradi: START → «Raqamni yuborish» → ulandi, eslatmalar Telegramga keladi.
+  let lastReceipt = null;
+  function qrBoxHtml(c) {
+    if (!c || !c.qrPng) return '';
+    return '<div class="qrbox"><img src="' + c.qrPng + '" alt="Telegram botga ulash QR kodi">' +
+      '<div class="qrtext"><b>📲 Mijoz telefon kamerasi bilan skaner qilsin</b>' +
+      'Bot ochiladi → <b>START</b> → <b>«📱 Raqamni yuborish»</b>. Shundan keyin servis eslatmalari va «Tayyor» xabari Telegramga bepul keladi.' +
+      '<div class="qrlink" style="margin-top:6px">' + esc(c.telegramLink || c.carUrl) + '</div></div></div>';
+  }
+  async function openQr(carId) {
+    show('qrModal', true);
+    $('qrBody').innerHTML = 'Yuklanmoqda…';
+    try {
+      const c = await api('/center/cars/' + carId + '/connect');
+      $('qrTitle').textContent = c.plateDisplay + ' · ' + c.ownerName;
+      $('qrBody').innerHTML = (c.telegramConnected ? '<div class="result ok">Bu mijoz Telegramga ulangan ✓</div>' : '') +
+        qrBoxHtml(c) +
+        '<div class="btns"><button class="btn-sm" type="button" id="qrPrint">🖨 Chek chiqarish (QR bilan)</button>' +
+        '<button class="btn-ghost btn-sm" type="button" data-copy="' + esc(c.telegramLink || c.carUrl) + '">Havolani nusxalash</button></div>';
+      $('qrPrint').onclick = () => printReceipt({ connect: c, records: [], when: new Date() });
+    } catch (err) { $('qrBody').innerHTML = '<div class="result warn">' + esc(err.message) + '</div>'; }
+  }
+  $('qrClose').onclick = () => show('qrModal', false);
+  $('qrModal').addEventListener('click', (e) => { if (e.target === $('qrModal')) show('qrModal', false); });
+
+  /** Oxirgi ishlar ro'yxatidan: shu yozuv (va o'sha tashrifdagi boshqa ishlar) uchun chek. */
+  async function printReceiptFor(recordId, carId) {
+    try {
+      const c = await api('/center/cars/' + carId + '/connect');
+      const d = await api('/center/dashboard');
+      const rec = (d.recent || []).find(x => x.id === recordId);
+      const sameVisit = rec ? (d.recent || []).filter(x => x.carId === rec.carId && x.doneDate === rec.doneDate) : [];
+      printReceipt({ connect: c, records: sameVisit.length ? sameVisit : (rec ? [rec] : []), when: rec ? new Date(rec.doneDate) : new Date() });
+    } catch (err) { alert(err.message); }
+  }
+
+  /** Chek: servis, sana, mashina, ishlar (narx/to'langan/qarz), keyingi muddatlar, QR + ulash taklifi. */
+  function printReceipt(x) {
+    const c = x.connect, list = x.records || [];
+    const dd = x.when || new Date();
+    const total = list.reduce((s, r) => s + (r.price || 0), 0), paid = list.reduce((s, r) => s + (r.paid || 0), 0), rem = list.reduce((s, r) => s + (r.remaining || 0), 0);
+    let h = '<h1>' + esc(c.centerName) + '</h1>' +
+      '<div class="c small">' + esc(c.centerAddress || '') + (c.centerPhone ? (c.centerAddress ? ' · ' : '') + esc(c.centerPhone) : '') + '</div>' +
+      '<div class="hr"></div>' +
+      '<table><tr><td>Sana</td><td class="r">' + pad(dd.getDate()) + '.' + pad(dd.getMonth() + 1) + '.' + dd.getFullYear() + '</td></tr>' +
+      '<tr><td>Mashina</td><td class="r"><b>' + esc(c.plateDisplay) + '</b></td></tr>' +
+      '<tr><td>Mijoz</td><td class="r">' + esc(c.ownerName) + '</td></tr></table>';
+    if (list.length) {
+      h += '<div class="hr"></div><table>' + list.map(r =>
+        '<tr><td>' + esc(r.serviceName) + (r.masterName ? '<div class="small">usta: ' + esc(r.masterName) + '</div>' : '') + '</td><td class="r">' + (r.price != null ? sum(r.price) : '') + '</td></tr>' +
+        (r.nextDate ? '<tr><td class="small" colspan="2">↳ keyingisi: ' + fmt(r.nextDate) + (r.mileage != null ? ' · probeg ' + Number(r.mileage).toLocaleString('ru-RU') + ' km' : '') + '</td></tr>' : '')).join('') + '</table>';
+      if (total > 0) h += '<div class="hr"></div><table><tr><td>Jami</td><td class="r"><b>' + sum(total) + '</b></td></tr>' +
+        '<tr><td>To\'langan</td><td class="r">' + sum(paid) + '</td></tr>' + (rem > 0 ? '<tr><td>Qarz</td><td class="r"><b>' + sum(rem) + '</b></td></tr>' : '') + '</table>';
+    }
+    h += '<div class="hr"></div>';
+    if (c.telegramConnected) {
+      h += '<div class="c small">Eslatmalar Telegram botga keladi ✓</div>';
+    } else if (c.qrPng) {
+      h += '<div class="c"><b>Servis vaqtini eslatib turamiz!</b></div>' +
+        '<div class="c small">QR ni telefon kamerasi bilan skaner qiling → Telegram botda START → «Raqamni yuborish». Moy, filtr va boshqa servislar vaqti kelganda bepul eslatma keladi.</div>' +
+        '<img src="' + c.qrPng + '" alt="QR">' +
+        '<div class="c small">' + esc(c.telegramLink || c.carUrl) + '</div>';
+    }
+    h += '<div class="c small" style="margin-top:6px">Mashina sahifasi: ' + esc(c.carUrl) + '</div><div class="c" style="margin-top:6px">Rahmat! 🙏</div>';
+    $('receipt').innerHTML = h;
+    // Rasm yuklanishini kutib, chop etish oynasini ochamiz
+    const img = $('receipt').querySelector('img');
+    const go = () => window.print();
+    if (img && !img.complete) img.onload = go; else setTimeout(go, 50);
   }
 
   // ================= DIREKTOR: XODIMLAR =================
@@ -1320,8 +1443,8 @@
         : '<span style="color:var(--muted)">● Ulanmagan</span> <button class="btn-ghost btn-sm" type="button" id="profLinkBtn">Ulash</button>') + '</div></div>' +
       fact('Mashina raqami', c.plateDisplay) + fact('Mijoz qayerdan kelgan', d.source || '—') + fact('Tashriflar', c.visits + ' ta') +
       '</div>' +
-      (linkOpen ? '<div class="linkbox">Mijozga shu havolani yuboring (SMS yoki boshqa messenjer orqali). U botni ochib, raqamini tasdiqlasa, eslatmalar Telegramga keladi:<br><b>' + esc(d.telegramLink) + '</b>' +
-        '<div class="btns"><button class="btn-sm" type="button" data-copy="' + esc(d.telegramLink) + '">Nusxalash</button></div></div>' : '') +
+      (linkOpen ? '<div class="linkbox">Mijoz telefonida QR ni skaner qilsin (yoki havolani yuboring). Botda START va «Raqamni yuborish» bosilsa, eslatmalar Telegramga keladi:<br><b>' + esc(d.telegramLink) + '</b>' +
+        '<div class="btns"><button class="btn-sm" type="button" data-qr="' + c.id + '">📲 QR ko\'rsatish</button><button class="btn-ghost btn-sm" type="button" data-copy="' + esc(d.telegramLink) + '">Nusxalash</button></div></div>' : '') +
       (c.blacklisted ? '<div class="msg show err" style="margin-top:6px">⛔ <b>Qora ro\'yxatda:</b> ' + esc(c.blacklistReason || '') +
         (d.blacklistedBy ? '<div class="small">' + esc(d.blacklistedBy) + ', ' + esc(fmtTime(d.blacklistedAt)) + '</div>' : '') + '</div>' : '') +
       (blEdit ? '<form id="blForm" novalidate class="linkbox"><label for="blReason">Qora ro\'yxatga qo\'shish sababi</label>' +
@@ -1759,11 +1882,14 @@
       b.disabled = true;
       try {
         const r = await api('/center/records/' + d.ready + '/ready', { method: 'POST' });
-        b.textContent = r.delivered ? 'Yuborildi ✓' : 'Yetkazilmadi — qo\'ng\'iroq qiling';
+        b.textContent = r.delivered ? 'Yuborildi ✓ (' + r.channel + ')' : 'Yetkazilmadi — QR ko\'rsating / qo\'ng\'iroq qiling';
         setTimeout(loadWork, 1200);
       } catch (err) { b.textContent = err.message; setTimeout(() => { b.disabled = false; b.textContent = '✅ Tayyor, keling'; }, 3000); }
       return;
     }
+    if (d.qr !== undefined && d.qr !== '' && !d.receipt) { openQr(Number(d.qr)); return; }
+    if (d.receipt) { printReceiptFor(Number(d.receipt), Number(d.qrCar)); return; }
+    if (d.print === 'last') { if (lastReceipt) printReceipt(lastReceipt); return; }
     if (d.copy) {
       try { await navigator.clipboard.writeText(d.copy); b.textContent = 'Nusxalandi ✓'; }
       catch (err) { b.outerHTML = '<input readonly value="' + esc(d.copy) + '" onclick="this.select()">'; }

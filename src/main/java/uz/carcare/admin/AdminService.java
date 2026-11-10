@@ -6,7 +6,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.carcare.admin.AdminDtos.*;
 import uz.carcare.config.AppProperties;
+import uz.carcare.config.TelegramProperties;
 import uz.carcare.loyalty.LoyaltyService;
+import uz.carcare.sms.SmsService;
+import uz.carcare.util.QrCodes;
 import uz.carcare.model.*;
 import uz.carcare.model.StaffUser.Role;
 import uz.carcare.reminder.MileageService;
@@ -44,6 +47,8 @@ public class AdminService {
     private final ReminderService reminders;
     private final MileageService mileage;
     private final TelegramClient telegram;
+    private final TelegramProperties telegramProps;
+    private final SmsService sms;
     private final AppProperties app;
     private final LoyaltyService loyalty;
 
@@ -51,7 +56,10 @@ public class AdminService {
                         StaffUserRepository staff, AdminSessionRepository sessions, ActivityLogRepository logs,
                         PaymentRepository payments, CustomerNoteRepository customerNotes,
                         AdminAuthService auth, AuditService audit, ReminderService reminders, MileageService mileage,
-                        TelegramClient telegram, AppProperties app, LoyaltyService loyalty) {
+                        TelegramClient telegram, TelegramProperties telegramProps, SmsService sms,
+                        AppProperties app, LoyaltyService loyalty) {
+        this.telegramProps = telegramProps;
+        this.sms = sms;
         this.mileage = mileage;
         this.loyalty = loyalty;
         this.payments = payments;
@@ -293,22 +301,45 @@ public class AdminService {
 
         Boolean delivered = null;
         String msg = created
-                ? "Yangi mijoz qo'shildi. Eslatmalar kelishi uchun unga sahifa havolasini yuboring — u yerdan Telegramga ulanadi."
+                ? "Yangi mijoz qo'shildi."
                 : (saved.size() > 1 ? saved.size() + " ta ish saqlandi. Mijoz sahifasida ko'rinadi." : "Saqlandi. Mijoz sahifasida ko'rinadi.");
         if (earn != null && earn.points() > 0) {
             msg += " Keshbek: +" + points(earn.points()) + " (balans " + points(earn.balance()) + ")."
                     + (earn.levelUp() ? " Mijoz " + earn.level().label() + " darajaga ko'tarildi!" : "");
         }
+        String readyChannel = null;
         if (p.isMaster()) {
             msg = (saved.size() > 1 ? saved.size() + " ta ish saqlandi." : "Saqlandi.") + " Mijozga xabarni administrator yuboradi.";
         } else if (req.notifyReady()) {
-            delivered = deliverReady(saved, center);
-            if (delivered) audit.staff(p, center, prettyPlate(plate) + " egasiga «Tayyor, keling» yubordi");
-            msg += delivered ? " \"Tayyor, keling\" xabari Telegramga yuborildi."
-                    : " Mijoz Telegramga ulanmagan — qo'ng'iroq qiling: " + prettyPhone(car.getPhone());
+            readyChannel = deliverReady(saved, center);
+            delivered = readyChannel != null;
+            if (delivered) audit.staff(p, center, prettyPlate(plate) + " egasiga «Tayyor, keling» yubordi (" + readyChannel + ")");
+            msg += delivered ? " \"Tayyor, keling\" xabari " + readyChannel + " orqali yuborildi."
+                    : " \"Tayyor\" xabari yetkazilmadi: mijoz Telegramga ulanmagan — qo'ng'iroq qiling: " + prettyPhone(car.getPhone()) + ".";
+        }
+        if (car.getTelegramChatId() == null && !p.isMaster()) {
+            msg += " Mijoz pastdagi QR kodni skaner qilsa (yoki chekdagi), eslatmalar Telegramga bepul keladi.";
         }
         List<AdminRecordDto> dtos = saved.stream().map(r -> toDto(r, today, p.canContactCustomers())).toList();
-        return new SaveResult(dtos.get(0), created, delivered, msg, dtos);
+        return new SaveResult(dtos.get(0), created, delivered, msg, dtos,
+                p.isMaster() ? null : connectInfo(car, center), readyChannel);
+    }
+
+    /** Mijozni Telegramga ulash uchun QR + havolalar (ish saqlanganda, profilda, chekda). */
+    @Transactional(readOnly = true)
+    public ConnectInfo connectInfo(AdminPrincipal p, Long carId) {
+        ServiceCenter center = center(p);
+        Car car = cars.findById(carId).orElseThrow(() -> ApiException.notFound("Mijoz topilmadi"));
+        if (!records.existsByCarAndCenter(car, center)) throw ApiException.notFound("Bu mijoz sizning servisingizda yo'q");
+        return connectInfo(car, center);
+    }
+
+    private ConnectInfo connectInfo(Car car, ServiceCenter center) {
+        String tg = telegramProps.deepLink(car.getToken());
+        String carUrl = app.carUrl(car.getToken());
+        return new ConnectInfo(car.getId(), prettyPlate(car.getPlateNumber()), car.getFullName(), prettyPhone(car.getPhone()),
+                car.getTelegramChatId() != null, tg, carUrl, QrCodes.pngDataUrl(tg != null ? tg : carUrl, 260),
+                center.getName(), center.getPhone() == null ? null : prettyPhone(center.getPhone()), center.getAddress());
     }
 
     @Transactional
@@ -322,10 +353,11 @@ public class AdminService {
             throw ApiException.badRequest("Xabar hozirgina yuborilgan. Biroz kuting.");
         }
         Car car = r.getCar();
-        boolean ok = deliverReady(r, center);
-        if (ok) audit.staff(p, center, prettyPlate(car.getPlateNumber()) + " egasiga «Tayyor, keling» yubordi");
+        String channel = deliverReady(r, center);
+        boolean ok = channel != null;
+        if (ok) audit.staff(p, center, prettyPlate(car.getPlateNumber()) + " egasiga «Tayyor, keling» yubordi (" + channel + ")");
         return new ReadyResult(ok, prettyPhone(car.getPhone()), car.getPhone(),
-                ok ? "Xabar Telegramga yuborildi" : "Mijoz Telegramga ulanmagan. Qo'ng'iroq qiling.");
+                ok ? "Xabar " + channel + " orqali yuborildi" : "Mijoz Telegramga ulanmagan. QR kodni ko'rsating yoki qo'ng'iroq qiling.", channel);
     }
 
     @Transactional(readOnly = true)
@@ -534,14 +566,30 @@ public class AdminService {
     //  Yordamchi
     // =====================================================================
 
-    private boolean deliverReady(ServiceRecord r, ServiceCenter center) {
+    private String deliverReady(ServiceRecord r, ServiceCenter center) {
         return deliverReady(List.of(r), center);
     }
 
     /** «Mashinangiz tayyor» — bir tashrifdagi barcha ishlar bitta xabarda. */
-    private boolean deliverReady(List<ServiceRecord> list, ServiceCenter center) {
+    /**
+     * «Mashinangiz tayyor». Telegram ulangan bo'lsa — Telegram; ulanmagan, lekin SMS yoqilgan bo'lsa — SMS,
+     * ichida Telegramga ulash havolasi (keyingi eslatmalar bepul kelishi uchun).
+     *
+     * @return yetkazilgan kanal nomi ("Telegram" / "SMS") yoki yetkazilmasa null
+     */
+    private String deliverReady(List<ServiceRecord> list, ServiceCenter center) {
         Car car = list.get(0).getCar();
-        if (car.getTelegramChatId() == null) return false;
+        if (car.getTelegramChatId() == null) {
+            if (!(car.isSmsEnabled() && sms.enabled())) return null;
+            String link = telegramProps.deepLink(car.getToken());
+            String text = prettyPlate(car.getPlateNumber()) + " mashinangiz tayyor, kelib olib ketishingiz mumkin. "
+                    + center.getName() + (center.getPhone() == null ? "" : ", tel " + prettyPhone(center.getPhone())) + "."
+                    + (link == null ? "" : " Servis muddatini eslatib turishimiz uchun Telegramga ulaning: " + link);
+            if (!sms.send(car.getPhone(), text)) return null;
+            Instant now = Instant.now();
+            list.forEach(r -> r.setReadyNotifiedAt(now));
+            return "SMS";
+        }
         StringBuilder done = new StringBuilder();
         if (list.size() == 1) {
             ServiceRecord r = list.get(0);
@@ -561,11 +609,10 @@ public class AdminService {
                 + (center.getPhone() == null ? "" : "📞 " + prettyPhone(center.getPhone()) + "\n")
                 + "\nKelib olib ketishingiz mumkin. Rahmat! 🙏";
         boolean ok = telegram.sendMessage(car.getTelegramChatId(), text);
-        if (ok) {
-            Instant now = Instant.now();
-            list.forEach(r -> r.setReadyNotifiedAt(now));
-        }
-        return ok;
+        if (!ok) return null;
+        Instant now = Instant.now();
+        list.forEach(r -> r.setReadyNotifiedAt(now));
+        return "Telegram";
     }
 
     private CenterStats stats(ServiceCenter c, List<ServiceRecord> all, LocalDate today) {

@@ -91,6 +91,12 @@ public class AdminController {
         return service.sendReady(auth.requireContact(h), id);
     }
 
+    /** Mijozni Telegramga ulash: QR kod va havolalar (ekran va chek uchun). */
+    @GetMapping("/center/cars/{carId}/connect")
+    public ConnectInfo connect(@RequestHeader(value = AUTH, required = false) String h, @PathVariable Long carId) {
+        return service.connectInfo(auth.requireContact(h), carId);
+    }
+
     // ---------- Direktor ----------
 
     @GetMapping("/center/staff")

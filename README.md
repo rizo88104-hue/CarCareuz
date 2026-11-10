@@ -279,6 +279,19 @@ Sadoqat API (direktor va administrator; `PUT settings`, `issue-all`, `adjust` �
 | POST | `/api/admin/center/customers/{id}/loyalty/card` | Karta ochish |
 | POST | `/api/admin/center/customers/{id}/loyalty/adjust` | Ball qo'shish/ayirish |
 
+### Mijozni Telegramga ulash: QR kod va chek
+Ko'pchilik mijoz havolani o'zi ochmaydi — shuning uchun ulash servis kassasida bo'ladi:
+- **ish saqlanganda** ekranda **QR kod** chiqadi (`t.me/Bot?start=KALIT`). Mijoz telefon kamerasi bilan
+  skaner qiladi → bot ochiladi → START → «Raqamni yuborish» → ulandi;
+- **«🖨 Chek chiqarish (QR bilan)»** — 58/80 mm termal printer uchun chek: servis, sana, mashina, ishlar,
+  narx/to'langan/qarz, keyingi muddatlar, pastida QR va «Servis vaqtini eslatib turamiz» taklifi;
+- oxirgi ishlar ro'yxatida ulanmagan mijoz uchun **«📲 QR — Telegramga ulash»** va har ish uchun **«🖨 Chek»**;
+  mijoz profilida **«Ulash» → «QR ko'rsatish»**;
+- **«Tayyor, keling»**: Telegram ulangan bo'lsa — Telegramga; ulanmagan, lekin SMS yoqilgan bo'lsa — SMS,
+  ichida Telegramga ulash havolasi. Ikkalasi ham yo'q bo'lsa — QR ko'rsatiladi va qo'ng'iroq tavsiya etiladi.
+
+API: `GET /api/admin/center/cars/{carId}/connect` → QR (PNG, base64), bot havolasi, sahifa havolasi.
+
 ### Ish kiritish jarayoni
 - **Bajarilgan ishni kiritadi:** mashina raqamini yozadi → tizim egasini o'zi topadi. Mashina
   ro'yxatda bo'lmasa, egasining ism va telefonini kiritadi, mijoz avtomatik yaratiladi.

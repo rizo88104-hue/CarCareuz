@@ -41,6 +41,13 @@
             <artifactId>spring-security-crypto</artifactId>
         </dependency>
 
+        <!-- QR kod (Telegram botga ulash havolasi — chek va ekran uchun) -->
+        <dependency>
+            <groupId>com.google.zxing</groupId>
+            <artifactId>core</artifactId>
+            <version>3.5.3</version>
+        </dependency>
+
         <!-- Lokal ishlash uchun (fayl ichidagi baza) -->
         <dependency>
             <groupId>com.h2database</groupId>

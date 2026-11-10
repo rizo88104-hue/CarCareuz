@@ -150,12 +150,31 @@ public final class AdminDtos {
     ) {
     }
 
-    /** record — birinchi yozuv (eski mijozlar uchun), records — tashrifdagi barcha yozuvlar. */
+    /**
+     * record — birinchi yozuv (eski mijozlar uchun), records — tashrifdagi barcha yozuvlar.
+     * connect — mijozni Telegramga ulash uchun QR va havola (chek uchun), readyChannel — «Tayyor» qayerga ketdi.
+     */
     public record SaveResult(AdminRecordDto record, boolean carCreated, Boolean readyDelivered, String message,
-                             List<AdminRecordDto> records) {
+                             List<AdminRecordDto> records, ConnectInfo connect, String readyChannel) {
     }
 
-    public record ReadyResult(boolean delivered, String phoneDisplay, String phone, String message) {
+    public record ReadyResult(boolean delivered, String phoneDisplay, String phone, String message, String channel) {
+    }
+
+    /**
+     * Mijozni Telegram botga ulash uchun hamma narsa: QR kod (PNG data URL), bot havolasi, sahifa havolasi.
+     * Ish saqlanganda ekranda ko'rsatiladi va chekka chiqariladi; mijoz QR ni skaner qilsa — bot ochiladi,
+     * START va «Raqamni yuborish» bilan ulanadi.
+     */
+    public record ConnectInfo(
+            Long carId, String plateDisplay, String ownerName, String phoneDisplay, boolean telegramConnected,
+            /** t.me/Bot?start=TOKEN (bot sozlanmagan bo'lsa null). */
+            String telegramLink,
+            String carUrl,
+            /** QR: telegramLink bo'lsa unga, aks holda carUrl ga. data:image/png;base64,... */
+            String qrPng,
+            String centerName, String centerPhone, String centerAddress
+    ) {
     }
 
     public record StaffBrief(Long id, String fullName) {
