@@ -84,6 +84,23 @@ ichida *Environment variables* ga yuqoridagi ikki o'zgaruvchini qo'shing.
 - **Server matnlari**: `src/main/resources/i18n/messages_uz.properties` va `messages_ru.properties`
   (`I18n.t("kalit", args)`, qoliplar `{0}`). Validatsiya xabarlari DTO larda `{v.kalit}` ko'rinishida.
 
+## Avtomatik testlar
+
+```bash
+mvn test
+```
+
+`src/test/java/uz/carcare`: xotiradagi H2, Telegram va SMS o'chiq, haqiqiy HTTP qatlam (MockMvc) orqali.
+- `WorkFlowTest` — ish kiritish: yangi mijoz, yozuv, mijoz sahifasi, bir turdagi yozuv almashishi, validatsiya
+  (o'zbek/rus), usta cheklovlari va keyin narx qo'yish, mijozning o'zi yozuv va probeg kiritishi, qayta kirish,
+  havolani yangilash.
+- `DebtTest` — to'lov va qarz daftari: qisman to'lov, qarzni yopish, filtrlar, cheklovlar (muddat, ortiqcha
+  to'lov), mijoz bo'yicha so'ndirish, narx to'langandan kam bo'lmasligi.
+- `LoyaltyTest` — sadoqat: karta ochilishi va xush kelibsiz bonusi, keshbek, ball bilan to'lov va uning chegarasi,
+  Kumush darajaga chiqish va chegirma, ballarni tuzatish, o'chiq dastur, sozlamalar validatsiyasi.
+- `SubscriptionTest` — obuna: sinov, to'lov, imtiyoz, bloklash va ochilish.
+- `UnitTests`, `DebtReminderRuleTest` — formatlash, IP ro'yxati, probeg matni, tarjima, qarz eslatmasi qoidasi.
+
 ## 3. Qanday ishlaydi
 
 1. `/` — foydalanuvchi ma'lumot kiritadi → `/car/{maxfiy-kalit}` sahifasi ochiladi.

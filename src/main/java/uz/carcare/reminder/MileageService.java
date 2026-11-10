@@ -49,7 +49,7 @@ public class MileageService {
     public boolean apply(Car car, int km, String by, boolean strict) {
         if (km <= 0 || km > MAX_KM) {
             if (!strict) return false;
-            throw ApiException.badRequest(I18n.t("err.km.range", String.format("%,d", MAX_KM).replace(',', ' ')));
+            throw ApiException.badRequest(I18n.t("err.km.range", km(MAX_KM).replace(" km", "")));
         }
         Integer cur = car.getCurrentMileage();
         if (cur != null && km < cur) {
@@ -128,7 +128,8 @@ public class MileageService {
         return c.getCurrentMileage() == null ? I18n.t("bot.km.none") : km(c.getCurrentMileage());
     }
 
+    /** "123 456 km" — tizim tilidan qat'i nazar oddiy bo'sh joy bilan guruhlangan. */
     public static String km(int v) {
-        return String.format("%,d", v).replace(',', ' ') + " km";
+        return String.format(java.util.Locale.US, "%,d", v).replace(',', ' ') + " km";
     }
 }
