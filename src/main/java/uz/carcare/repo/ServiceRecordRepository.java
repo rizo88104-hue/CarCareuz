@@ -22,6 +22,25 @@ public interface ServiceRecordRepository extends JpaRepository<ServiceRecord, Lo
 
     Optional<ServiceRecord> findByIdAndCar(Long id, Car car);
 
+    boolean existsByCarAndCenter(Car car, ServiceCenter center);
+
+    /** Servisning qarzga qilingan barcha ishlari (qarz daftari). */
+    @Query("select r from ServiceRecord r join fetch r.car where r.center = :center and r.credit = true")
+    List<ServiceRecord> findCreditForCenter(@Param("center") ServiceCenter center);
+
+    Optional<ServiceRecord> findByIdAndCenter(Long id, ServiceCenter center);
+
+    /** Qarz eslatmalari uchun: muddati yaqin yoki o'tgan qarzlar (barcha servislar). */
+    @Query("""
+            select r from ServiceRecord r join fetch r.car left join fetch r.center
+            where r.credit = true and r.payDueDate is not null and r.payDueDate <= :limit
+            """)
+    List<ServiceRecord> findDebtsDueBy(@Param("limit") LocalDate limit);
+
+    /** Mashinalar va ularga ish qilgan servislar nomi (super admin mijozlar ro'yxati uchun). */
+    @Query("select distinct r.car.id, r.center.name from ServiceRecord r where r.car in :cars and r.center is not null")
+    List<Object[]> findCenterNamesForCars(@Param("cars") List<Car> cars);
+
     /**
      * Eslatma yuborilishi kerak bo'lgan yozuvlar:
      *  - muddatiga 7 kun (yoki kamroq) qolgan va haftalik eslatma hali ketmagan,

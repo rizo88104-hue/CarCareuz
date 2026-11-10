@@ -127,6 +127,8 @@ public class TelegramBotPoller {
                     TelegramClient.contactKeyboard());
         } else if (text.startsWith("/holat") || text.startsWith("/status")) {
             telegram.sendMessage(chatId, cars.statusText(chatId));
+        } else if (text.startsWith("/ball") || text.startsWith("/bonus") || text.startsWith("/karta")) {
+            telegram.sendMessage(chatId, cars.loyaltyText(chatId));
         } else {
             telegram.sendMessage(chatId, welcome(name));
         }
@@ -166,7 +168,7 @@ public class TelegramBotPoller {
                 + "Men mashinangiz servislari (moy, filtrlar, sug'urta va h.k.) muddatini eslatib turaman.\n\n"
                 + "1️⃣ Saytda ro'yxatdan o'ting: " + app.baseUrl() + "\n"
                 + "2️⃣ Mashina sahifasida <b>\"Telegramga ulash\"</b> tugmasini bosing\n\n"
-                + "Buyruqlar:\n/holat — mashinalarim va yaqin servislar";
+                + "Buyruqlar:\n/holat — mashinalarim va yaqin servislar\n/ball — jamg'arma kartalarim va bonus ballarim";
     }
 
     private static void sleepQuietly(long ms) {

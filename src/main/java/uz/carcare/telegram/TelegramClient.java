@@ -4,17 +4,23 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import jakarta.annotation.PreDestroy;
 import uz.carcare.config.TelegramProperties;
 
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Telegram Bot API bilan ishlash (https://core.telegram.org/bots/api).
@@ -31,18 +37,40 @@ public class TelegramClient {
     private static final long MIN_INTERVAL_MS = 40;
 
     private final TelegramProperties props;
+    /** Long polling (getUpdates) uchun: javob 25 s gacha kutiladi. */
     private final RestClient http;
+    /** Xabar yuborish uchun: qisqa kutish — Telegram sekin javob bersa, sayt qotib qolmaydi. */
+    private final RestClient sendHttp;
+    /** Natijasi kerak bo'lmagan xabarlar shu bitta fon oqimida navbat bilan yuboriladi. */
+    private final ExecutorService outbox = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, OUTBOX_THREAD);
+        t.setDaemon(true);
+        return t;
+    });
+    private static final String OUTBOX_THREAD = "telegram-outbox";
+    /** So'rov (sayt) oqimida 429 javobida ko'pi bilan shuncha kutiladi; uzoqrog'i — fon oqimida. */
+    private static final long MAX_INLINE_WAIT_S = 3;
     private final ObjectMapper json = new ObjectMapper();
     private long lastSendAt = 0;
+    /** Jurnal (ObjectProvider — aylanma bog'liqlik bo'lmasligi uchun). */
+    private final ObjectProvider<BotMessageLog> messageLog;
 
-    public TelegramClient(TelegramProperties props) {
+    public TelegramClient(TelegramProperties props, ObjectProvider<BotMessageLog> messageLog) {
         this.props = props;
+        this.messageLog = messageLog;
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(10));
         factory.setReadTimeout(Duration.ofSeconds(45)); // long polling 25 s dan uzunroq bo'lishi kerak
         this.http = RestClient.builder()
                 .baseUrl("https://api.telegram.org/bot" + props.botToken())
                 .requestFactory(factory)
+                .build();
+        SimpleClientHttpRequestFactory sendFactory = new SimpleClientHttpRequestFactory();
+        sendFactory.setConnectTimeout(Duration.ofSeconds(5));
+        sendFactory.setReadTimeout(Duration.ofSeconds(10));
+        this.sendHttp = RestClient.builder()
+                .baseUrl("https://api.telegram.org/bot" + props.botToken())
+                .requestFactory(sendFactory)
                 .build();
     }
 
@@ -55,10 +83,52 @@ public class TelegramClient {
     }
 
     /**
+     * Natijasi kerak bo'lmagan xabar (kvitansiya, sadoqat xabarlari va h.k.): fon oqimida yuboriladi,
+     * shuning uchun xodim tugmani bosganda Telegram'ni kutmaydi. Tranzaksiya ichida chaqirilsa —
+     * faqat u muvaffaqiyatli saqlangandan keyin yuboriladi (bekor bo'lgan amal haqida xabar ketmaydi).
+     */
+    public void sendLater(long chatId, String html) {
+        Runnable job = () -> {
+            try {
+                sendMessage(chatId, html);
+            } catch (Exception e) {
+                log.warn("Fon xabarini yuborib bo'lmadi (chat={}): {}", chatId, e.getMessage());
+            }
+        };
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    outbox.execute(job);
+                }
+            });
+        } else {
+            outbox.execute(job);
+        }
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        outbox.shutdown();
+    }
+
+    /**
      * HTML formatdagi xabar yuboradi. replyMarkup — klaviatura (masalan "raqamni yuborish" tugmasi).
      * Muvaffaqiyatli bo'lsa true.
      */
     public boolean sendMessage(long chatId, String html, Map<String, Object> replyMarkup) {
+        boolean ok = send(chatId, html, replyMarkup);
+        record(chatId, html, ok);
+        return ok;
+    }
+
+    /** Har bir chiqqan xabar jurnalga yoziladi (bot_messages) — mijozga nima ketganini tekshirish uchun. */
+    private void record(long chatId, String html, boolean delivered) {
+        BotMessageLog l = messageLog.getIfAvailable();
+        if (l != null) l.record(chatId, html, delivered);
+    }
+
+    private boolean send(long chatId, String html, Map<String, Object> replyMarkup) {
         if (!enabled()) {
             log.info("[Telegram o'chiq] chat={} xabar:\n{}", chatId, html);
             return false;
@@ -73,7 +143,7 @@ public class TelegramClient {
         for (int attempt = 1; attempt <= 2; attempt++) {
             throttle();
             try {
-                JsonNode res = http.post().uri("/sendMessage")
+                JsonNode res = sendHttp.post().uri("/sendMessage")
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(body)
                         .retrieve()
@@ -81,6 +151,14 @@ public class TelegramClient {
                 return res != null && res.path("ok").asBoolean(false);
             } catch (HttpClientErrorException.TooManyRequests e) {
                 long wait = retryAfterSeconds(e);
+                boolean background = OUTBOX_THREAD.equals(Thread.currentThread().getName());
+                if (!background && wait > MAX_INLINE_WAIT_S) {
+                    // Sayt so'rovini uzoq ushlab turmaymiz: xabar fon navbatiga o'tadi
+                    log.warn("Telegram limiti (429), xabar fon navbatiga qo'yildi (chat={})", chatId);
+                    final Map<String, Object> markup = replyMarkup;
+                    outbox.execute(() -> { sleepQuietly(wait * 1000); send(chatId, html, markup); });
+                    return true;
+                }
                 log.warn("Telegram limiti (429), {} s kutamiz", wait);
                 sleepQuietly(wait * 1000);
             } catch (RestClientException e) {

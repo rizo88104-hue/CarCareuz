@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.carcare.admin.AdminDtos.*;
 import uz.carcare.config.AppProperties;
+import uz.carcare.loyalty.LoyaltyService;
 import uz.carcare.model.*;
 import uz.carcare.model.StaffUser.Role;
 import uz.carcare.reminder.ReminderService;
@@ -35,16 +36,23 @@ public class AdminService {
     private final StaffUserRepository staff;
     private final AdminSessionRepository sessions;
     private final ActivityLogRepository logs;
+    private final PaymentRepository payments;
+    private final CustomerNoteRepository customerNotes;
     private final AdminAuthService auth;
     private final AuditService audit;
     private final ReminderService reminders;
     private final TelegramClient telegram;
     private final AppProperties app;
+    private final LoyaltyService loyalty;
 
     public AdminService(CarRepository cars, ServiceRecordRepository records, ServiceCenterRepository centers,
                         StaffUserRepository staff, AdminSessionRepository sessions, ActivityLogRepository logs,
+                        PaymentRepository payments, CustomerNoteRepository customerNotes,
                         AdminAuthService auth, AuditService audit, ReminderService reminders,
-                        TelegramClient telegram, AppProperties app) {
+                        TelegramClient telegram, AppProperties app, LoyaltyService loyalty) {
+        this.loyalty = loyalty;
+        this.payments = payments;
+        this.customerNotes = customerNotes;
         this.cars = cars;
         this.records = records;
         this.centers = centers;
@@ -66,13 +74,18 @@ public class AdminService {
     public CarLookupDto lookup(AdminPrincipal p, String plateRaw) {
         String plate = normalizePlate(plateRaw);
         boolean showPhone = p.canContactCustomers();
+        ServiceCenter center = center(p);
         return cars.findByPlateNumber(plate).map(car -> new CarLookupDto(true, plate, prettyPlate(plate),
                         car.getFirstName(), car.getLastName(),
                         showPhone ? car.getPhone() : null, showPhone ? prettyPhone(car.getPhone()) : null,
                         car.getTelegramChatId() != null,
                         records.findAllByCarAndActiveTrueOrderByNextDateAsc(car).stream()
-                                .map(r -> r.displayName() + " — " + date(r.getNextDate())).toList()))
-                .orElse(new CarLookupDto(false, plate, prettyPlate(plate), null, null, null, null, false, List.of()));
+                                .map(r -> r.displayName() + " — " + date(r.getNextDate())).toList(),
+                        customerNotes.findByCenterAndCar(center, car)
+                                .filter(CustomerNote::isBlacklisted).map(CustomerNote::getBlacklistReason).orElse(null),
+                        showPhone ? loyalty.lookup(center, car) : null))
+                .orElseGet(() -> new CarLookupDto(false, plate, prettyPlate(plate), null, null, null, null, false, List.of(), null,
+                        showPhone ? loyalty.lookup(center, null) : null));
     }
 
     @Transactional
@@ -80,14 +93,28 @@ public class AdminService {
         ServiceCenter center = center(p);
         LocalDate today = today();
 
-        if (req.nextDate().isBefore(req.doneDate())) {
-            throw ApiException.badRequest("Keyingi sana bajarilgan sanadan oldin bo'lishi mumkin emas");
-        }
         if (req.doneDate().isAfter(today)) {
             throw ApiException.badRequest("Bajarilgan sana kelajakda bo'lishi mumkin emas");
         }
-        if (req.type() == ServiceType.OTHER && (req.customName() == null || req.customName().isBlank())) {
-            throw ApiException.badRequest("\"Boshqa\" turi uchun nomini yozing");
+        // Bir tashrifdagi ishlar. Eski format (bitta type) ham qabul qilinadi.
+        List<RecordItem> items = req.items() != null && !req.items().isEmpty() ? req.items()
+                : List.of(new RecordItem(req.type(), req.customName(), req.nextDate(), req.nextMileage(), req.price()));
+        if (items.size() > 10) throw ApiException.badRequest("Bir tashrifda ko'pi bilan 10 ta ish kiritiladi");
+        Set<ServiceType> seen = new HashSet<>();
+        for (RecordItem it : items) {
+            if (it == null || it.type() == null) throw ApiException.badRequest("Nima qilinganini tanlang");
+            String label = it.type() == ServiceType.OTHER && it.customName() != null && !it.customName().isBlank()
+                    ? it.customName().trim() : it.type().getLabel();
+            if (it.type() == ServiceType.OTHER && (it.customName() == null || it.customName().isBlank())) {
+                throw ApiException.badRequest("\"Boshqa\" turi uchun nomini yozing");
+            }
+            if (it.type() != ServiceType.OTHER && !seen.add(it.type())) {
+                throw ApiException.badRequest("«" + label + "» ikki marta tanlangan");
+            }
+            if (it.nextDate() == null) throw ApiException.badRequest("«" + label + "»: keyingi almashtirish sanasini kiriting");
+            if (it.nextDate().isBefore(req.doneDate())) {
+                throw ApiException.badRequest("«" + label + "»: keyingi sana bajarilgan sanadan oldin bo'lishi mumkin emas");
+            }
         }
 
         // Ishni kim qilgani: usta o'zi, direktor/administrator esa ustani tanlaydi
@@ -101,6 +128,38 @@ public class AdminService {
 
         String plate = normalizePlate(req.plateNumber());
         Car car = cars.findByPlateNumber(plate).orElse(null);
+
+        // Narx va to'lov: faqat direktor va administrator kiritadi.
+        // Har bir ish narxi — chegirmagacha; sadoqat chegirmasi har ishga alohida qo'llanadi.
+        // To'lov va ball butun tashrif (jami) uchun kiritiladi va ishlar bo'yicha taqsimlanadi.
+        boolean staffMoney = !p.isMaster();
+        int discountPct = staffMoney && !Boolean.FALSE.equals(req.applyDiscount()) ? loyalty.discountPct(center, car) : 0;
+        long listTotal = 0, total = 0, discountTotal = 0;
+        long[] finals = new long[items.size()], discounts = new long[items.size()];
+        for (int i = 0; i < items.size(); i++) {
+            Long pr = items.get(i).price();
+            if (!staffMoney || pr == null || pr <= 0) continue;
+            discounts[i] = LoyaltyService.percent(pr, discountPct);
+            finals[i] = pr - discounts[i];
+            listTotal += pr;
+            discountTotal += discounts[i];
+            total += finals[i];
+        }
+        boolean money = total > 0;
+        long bonusUse = money && req.bonus() != null ? req.bonus() : 0;
+        if (bonusUse > total) throw ApiException.badRequest("Ball bilan to'lov jami narxdan oshmasin");
+        long paidNow = money ? (req.paid() == null ? total - bonusUse : req.paid()) : 0;
+        if (money) {
+            if (paidNow + bonusUse > total) {
+                throw ApiException.badRequest(bonusUse > 0 ? "To'lov va ball birgalikda jami narxdan (" + money(total) + ") oshmasin"
+                        : "To'langan summa jami narxdan (" + money(total) + ") oshmasin");
+            }
+            if (paidNow + bonusUse < total) {
+                if (req.payDueDate() == null) throw ApiException.badRequest("Qarz qolyapti — to'lash muddatini kiriting");
+                if (req.payDueDate().isBefore(today)) throw ApiException.badRequest("To'lash muddati o'tgan sana bo'lishi mumkin emas");
+            }
+        }
+
         boolean created = false;
         if (car == null) {
             if (req.firstName() == null || req.firstName().isBlank()) {
@@ -117,40 +176,132 @@ public class AdminService {
             audit.staff(p, center, "Yangi mijoz qo'shdi: " + car.getFullName().trim() + ", " + prettyPlate(plate));
         }
 
-        if (req.type() != ServiceType.OTHER) {
-            for (ServiceRecord old : records.findAllByCarAndTypeAndActiveTrue(car, req.type())) {
-                old.markReplaced(center);
+        // Yozuvlar: har bir ish alohida
+        List<ServiceRecord> saved = new ArrayList<>();
+        List<ServiceRecord> priced = new ArrayList<>();
+        for (int i = 0; i < items.size(); i++) {
+            RecordItem it = items.get(i);
+            if (it.type() != ServiceType.OTHER) {
+                for (ServiceRecord old : records.findAllByCarAndTypeAndActiveTrue(car, it.type())) {
+                    old.markReplaced(center);
+                }
             }
+            ServiceRecord r = new ServiceRecord();
+            r.setCar(car);
+            r.setCenter(center);
+            r.setType(it.type());
+            r.setCustomName(it.type() == ServiceType.OTHER ? trim(it.customName()) : null);
+            r.setDoneDate(req.doneDate());
+            r.setNextDate(it.nextDate());
+            r.setMileage(req.mileage());
+            r.setNextMileage(it.nextMileage());
+            r.setNote(trim(req.note()));
+            r.setMasterName(masterName);
+            if (finals[i] > 0) {
+                r.setPrice(finals[i]);
+                r.setDiscount(discounts[i]);
+                priced.add(r);
+            }
+            records.save(r);
+            saved.add(r);
         }
 
-        ServiceRecord r = new ServiceRecord();
-        r.setCar(car);
-        r.setCenter(center);
-        r.setType(req.type());
-        r.setCustomName(req.type() == ServiceType.OTHER ? trim(req.customName()) : null);
-        r.setDoneDate(req.doneDate());
-        r.setNextDate(req.nextDate());
-        r.setMileage(req.mileage());
-        r.setNextMileage(req.nextMileage());
-        r.setNote(trim(req.note()));
-        r.setMasterName(masterName);
-        records.save(r);
-        reminders.checkNow(r);
-        audit.staff(p, center, prettyPlate(plate) + " — " + r.displayName() + " kiritdi (usta: " + masterName + ")");
+        // Sadoqat: tashrif bir marta (karta bir marta ochiladi), keyin ball, keyin pul to'lovi va keshbek
+        loyalty.onVisit(center, car, p.fullName());
+        if (bonusUse > 0) {
+            LoyaltyProgram prog = loyalty.activeProgram(center);
+            LoyaltyAccount acc = loyalty.account(center, car).orElse(null);
+            long capTotal = 0;
+            for (ServiceRecord r : priced) capTotal += loyalty.redeemCap(prog, acc, r);
+            if (prog == null || acc == null || bonusUse > Math.min(capTotal, acc.getBalance())) {
+                long allowed = acc == null ? 0 : Math.min(capTotal, acc.getBalance());
+                throw ApiException.badRequest("Ball bilan ko'pi bilan " + money(allowed) + " to'lash mumkin"
+                        + (prog == null ? "" : " (har bir ish narxining " + prog.getMaxRedeemPct() + "% gacha)"));
+            }
+            long left = bonusUse;
+            for (ServiceRecord r : priced) {
+                if (left == 0) break;
+                long part = Math.min(left, loyalty.redeemCap(prog, acc, r));
+                if (part <= 0) continue;
+                loyalty.redeem(center, r, part, p.fullName(), "Ish kiritilganda");
+                left -= part;
+            }
+        }
+        Payment.Method method = req.paymentMethod() == null || req.paymentMethod() == Payment.Method.BONUS
+                ? Payment.Method.CASH : req.paymentMethod();
+        long earnedPoints = 0;
+        LoyaltyService.Earn lastEarn = null;
+        boolean levelUp = false;
+        long left = paidNow;
+        for (ServiceRecord r : priced) {
+            if (left == 0) break;
+            long part = Math.min(left, r.getRemaining());
+            if (part <= 0) continue;
+            payments.save(new Payment(r, center, part, method, p.fullName(), "Ish kiritilganda"));
+            r.addPaid(part);
+            left -= part;
+            LoyaltyService.Earn e = loyalty.onMoneyPayment(center, r, part, p.fullName());
+            if (e != null) {
+                earnedPoints += e.points();
+                levelUp |= e.levelUp();
+                lastEarn = e;
+            }
+        }
+        LoyaltyService.Earn earn = lastEarn == null ? null
+                : new LoyaltyService.Earn(earnedPoints, lastEarn.balance(), lastEarn.level(), levelUp, lastEarn.cashbackPct());
+        long debt = 0;
+        for (ServiceRecord r : priced) {
+            if (r.getRemaining() > 0) {
+                r.setCredit(true);
+                r.setPayDueDate(req.payDueDate());
+                debt += r.getRemaining();
+            }
+        }
+        for (ServiceRecord r : saved) reminders.checkNow(r);
+
+        String names = saved.stream().map(ServiceRecord::displayName).collect(java.util.stream.Collectors.joining(", "));
+        audit.staff(p, center, prettyPlate(plate) + " — " + names + " kiritdi (usta: " + masterName + ")"
+                + (money ? ", " + (saved.size() > 1 ? "jami narx " : "narx ") + money(total) : "")
+                + (discountTotal > 0 ? " (chegirma " + discountPct + "%: −" + money(discountTotal) + ")" : "")
+                + (bonusUse > 0 ? ", ball bilan " + money(bonusUse) : "")
+                + (debt > 0 ? ", qarz " + money(debt) : ""));
+
+        // Sadoqat ishtirok etgan bo'lsa — mijozga bitta kvitansiya (barcha ishlar bilan)
+        boolean loyaltyUsed = discountTotal > 0 || bonusUse > 0 || (earn != null && earn.points() > 0);
+        if (money && loyaltyUsed && car.getTelegramChatId() != null) {
+            StringBuilder lines = new StringBuilder();
+            for (ServiceRecord r : priced) {
+                lines.append("• ").append(html(r.displayName())).append(": ").append(money(r.getPrice())).append("\n");
+            }
+            telegram.sendLater(car.getTelegramChatId(),
+                    "🧾 <b>To'lov</b>\n\n🚗 <b>" + html(prettyPlate(plate)) + "</b>\n" + lines
+                            + (discountTotal > 0 ? "💰 Narx: " + money(listTotal) + " − chegirma " + discountPct + "% = <b>" + money(total) + "</b>\n"
+                            : "💰 Jami: <b>" + money(total) + "</b>\n")
+                            + (bonusUse > 0 ? "🎁 Ball bilan: <b>" + money(bonusUse) + "</b>\n" : "")
+                            + (paidNow > 0 ? "💵 To'landi: <b>" + money(paidNow) + "</b> (" + method.label().toLowerCase() + ")\n" : "")
+                            + (debt > 0 ? "📌 Qarz: <b>" + money(debt) + "</b>, muddat " + date(req.payDueDate()) + "\n" : "")
+                            + LoyaltyService.receiptLine(earn)
+                            + "\n\n📍 " + html(center.getName()));
+        }
 
         Boolean delivered = null;
         String msg = created
                 ? "Yangi mijoz qo'shildi. Eslatmalar kelishi uchun unga sahifa havolasini yuboring — u yerdan Telegramga ulanadi."
-                : "Saqlandi. Mijoz sahifasida ko'rinadi.";
+                : (saved.size() > 1 ? saved.size() + " ta ish saqlandi. Mijoz sahifasida ko'rinadi." : "Saqlandi. Mijoz sahifasida ko'rinadi.");
+        if (earn != null && earn.points() > 0) {
+            msg += " Keshbek: +" + points(earn.points()) + " (balans " + points(earn.balance()) + ")."
+                    + (earn.levelUp() ? " Mijoz " + earn.level().label() + " darajaga ko'tarildi!" : "");
+        }
         if (p.isMaster()) {
-            msg = "Saqlandi. Mijozga xabarni administrator yuboradi.";
+            msg = (saved.size() > 1 ? saved.size() + " ta ish saqlandi." : "Saqlandi.") + " Mijozga xabarni administrator yuboradi.";
         } else if (req.notifyReady()) {
-            delivered = deliverReady(r, center);
+            delivered = deliverReady(saved, center);
             if (delivered) audit.staff(p, center, prettyPlate(plate) + " egasiga «Tayyor, keling» yubordi");
             msg += delivered ? " \"Tayyor, keling\" xabari Telegramga yuborildi."
                     : " Mijoz Telegramga ulanmagan — qo'ng'iroq qiling: " + prettyPhone(car.getPhone());
         }
-        return new SaveResult(toDto(r, today, p.canContactCustomers()), created, delivered, msg);
+        List<AdminRecordDto> dtos = saved.stream().map(r -> toDto(r, today, p.canContactCustomers())).toList();
+        return new SaveResult(dtos.get(0), created, delivered, msg, dtos);
     }
 
     @Transactional
@@ -377,18 +528,36 @@ public class AdminService {
     // =====================================================================
 
     private boolean deliverReady(ServiceRecord r, ServiceCenter center) {
-        Car car = r.getCar();
+        return deliverReady(List.of(r), center);
+    }
+
+    /** «Mashinangiz tayyor» — bir tashrifdagi barcha ishlar bitta xabarda. */
+    private boolean deliverReady(List<ServiceRecord> list, ServiceCenter center) {
+        Car car = list.get(0).getCar();
         if (car.getTelegramChatId() == null) return false;
+        StringBuilder done = new StringBuilder();
+        if (list.size() == 1) {
+            ServiceRecord r = list.get(0);
+            done.append("🔧 Bajarildi: <b>").append(html(r.displayName())).append("</b>\n")
+                    .append("📅 Keyingi almashtirish: <b>").append(date(r.getNextDate())).append("</b>\n");
+        } else {
+            done.append("🔧 Bajarildi:\n");
+            for (ServiceRecord r : list) {
+                done.append("• <b>").append(html(r.displayName())).append("</b> — keyingisi ").append(date(r.getNextDate())).append("\n");
+            }
+        }
         String text = "✅ <b>Mashinangiz tayyor!</b>\n\n"
                 + "🚗 <b>" + html(prettyPlate(car.getPlateNumber())) + "</b>\n"
-                + "🔧 Bajarildi: <b>" + html(r.displayName()) + "</b>\n"
-                + "📅 Keyingi almashtirish: <b>" + date(r.getNextDate()) + "</b>\n\n"
+                + done + "\n"
                 + "📍 <b>" + html(center.getName()) + "</b>\n"
                 + (center.getAddress() == null || center.getAddress().isBlank() ? "" : html(center.getAddress()) + "\n")
                 + (center.getPhone() == null ? "" : "📞 " + prettyPhone(center.getPhone()) + "\n")
                 + "\nKelib olib ketishingiz mumkin. Rahmat! 🙏";
         boolean ok = telegram.sendMessage(car.getTelegramChatId(), text);
-        if (ok) r.setReadyNotifiedAt(Instant.now());
+        if (ok) {
+            Instant now = Instant.now();
+            list.forEach(r -> r.setReadyNotifiedAt(now));
+        }
         return ok;
     }
 
@@ -446,7 +615,10 @@ public class AdminService {
                 withPhone ? car.getPhone() : null, withPhone ? prettyPhone(car.getPhone()) : null,
                 car.getTelegramChatId() != null, r.displayName(), r.getDoneDate(), r.getNextDate(),
                 ChronoUnit.DAYS.between(today, r.getNextDate()), r.getMileage(), r.getNote(), r.getMasterName(),
-                r.isActive(), r.getReadyNotifiedAt(), withPhone ? app.carUrl(car.getToken()) : null);
+                r.isActive(), r.getReadyNotifiedAt(), withPhone ? app.carUrl(car.getToken()) : null,
+                withPhone ? r.getPrice() : null, withPhone && r.getPrice() != null ? r.getPaid() : null,
+                withPhone && r.getPrice() != null ? r.getRemaining() : null, withPhone ? r.getPayDueDate() : null,
+                withPhone ? r.getDiscount() : null, withPhone ? r.getBonusPaid() : null, withPhone ? car.getId() : null);
     }
 
     private StaffDto staffDto(StaffUser u) {

@@ -42,6 +42,33 @@ public class Car {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    // ---------- Mijoz profili (ixtiyoriy) ----------
+
+    public enum Gender { MALE, FEMALE }
+
+    private java.time.LocalDate birthDate;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 10)
+    private Gender gender;
+
+    /** Mijoz qayerdan kelgan: Instagram, tanish tavsiyasi va h.k. */
+    @Column(length = 60)
+    private String source;
+
+    /** Qaysi yili tug'ilgan kun tabrigi yuborilgan (bir yilda bir marta). */
+    private Integer birthdayGreetedYear;
+
+    public Integer getBirthdayGreetedYear() { return birthdayGreetedYear; }
+    public void setBirthdayGreetedYear(Integer year) { this.birthdayGreetedYear = year; }
+
+    public java.time.LocalDate getBirthDate() { return birthDate; }
+    public void setBirthDate(java.time.LocalDate birthDate) { this.birthDate = birthDate; }
+    public Gender getGender() { return gender; }
+    public void setGender(Gender gender) { this.gender = gender; }
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
+
     public Long getId() { return id; }
     public String getToken() { return token; }
     public void setToken(String token) { this.token = token; }

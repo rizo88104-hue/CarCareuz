@@ -86,6 +86,51 @@ public class ServiceRecord {
     public String getMasterName() { return masterName; }
     public void setMasterName(String masterName) { this.masterName = masterName; }
 
+    // ---------- Narx va to'lov (so'mda) ----------
+
+    /** Ish narxi. null — narx kiritilmagan. */
+    private Long price;
+
+    /** Shu ish uchun jami to'langan (to'lovlar yig'indisi, tez hisoblash uchun saqlanadi). */
+    private Long paidAmount;
+
+    /** Qarzni to'lash muddati (qarz bo'lsa). */
+    private LocalDate payDueDate;
+
+    /** true — ish qarzga qilingan (qarz daftarida ko'rinadi, to'liq to'langandan keyin ham tarix uchun qoladi). */
+    private Boolean credit;
+
+    /** Sadoqat chegirmasi (so'mda). price — chegirmadan keyingi, to'lanadigan narx. */
+    private Long discount;
+
+    /** Shu ish uchun ball bilan to'langan summa. */
+    private Long bonusPaid;
+
+    public long getDiscount() { return discount == null ? 0 : discount; }
+    public void setDiscount(long discount) { this.discount = discount == 0 ? null : discount; }
+    public long getBonusPaid() { return bonusPaid == null ? 0 : bonusPaid; }
+    public void addBonusPaid(long amount) { this.bonusPaid = getBonusPaid() + amount; }
+
+    /** Qarz eslatmasi oxirgi marta qachon yuborilgan. */
+    private LocalDate debtRemindedOn;
+
+    public LocalDate getDebtRemindedOn() { return debtRemindedOn; }
+    public void setDebtRemindedOn(LocalDate d) { this.debtRemindedOn = d; }
+
+    public Long getPrice() { return price; }
+    public void setPrice(Long price) { this.price = price; }
+    public long getPaid() { return paidAmount == null ? 0 : paidAmount; }
+    public void addPaid(long amount) { this.paidAmount = getPaid() + amount; }
+    public LocalDate getPayDueDate() { return payDueDate; }
+    public void setPayDueDate(LocalDate payDueDate) { this.payDueDate = payDueDate; }
+    public boolean isCredit() { return Boolean.TRUE.equals(credit); }
+    public void setCredit(boolean credit) { this.credit = credit; }
+
+    /** To'lanmagan qoldiq (narx kiritilmagan bo'lsa 0). */
+    public long getRemaining() {
+        return price == null ? 0 : Math.max(0, price - getPaid());
+    }
+
     /** Yozuvni arxivga o'tkazadi: shu turdagi yangi servis qilindi. */
     public void markReplaced(ServiceCenter byCenter) {
         this.active = false;

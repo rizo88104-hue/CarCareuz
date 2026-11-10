@@ -37,6 +37,22 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(Map.of("error", "Ma'lumotlar formati noto'g'ri"));
     }
 
+    /** Ikki xodim bir vaqtda bir narsani o'zgartirdi (masalan, bir kartadan ball yechish). */
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    public ResponseEntity<Map<String, String>> conflict(Exception e) {
+        log.warn("Bir vaqtdagi o'zgarish: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", "Ma'lumot shu payt boshqa xodim tomonidan o'zgartirildi. Sahifani yangilab, qayta urinib ko'ring."));
+    }
+
+    /** Masalan, bir xil login yoki mashina raqami bir vaqtda ikki marta saqlanmoqchi bo'lsa. */
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, String>> integrity(Exception e) {
+        log.warn("Ma'lumotlar bazasi cheklovi: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(Map.of("error", "Saqlab bo'lmadi: bunday yozuv allaqachon bor yoki u boshqa ma'lumotga bog'langan. Sahifani yangilab, qayta tekshiring."));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> other(Exception e) {
         // Spring ning o'z xatolari (404 sahifa, noto'g'ri metod va h.k.) — o'z statusi bilan

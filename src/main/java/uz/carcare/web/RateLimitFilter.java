@@ -21,10 +21,14 @@ import java.nio.charset.StandardCharsets;
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    private final RateLimiter general = new RateLimiter(60, 60_000);
-    private final RateLimiter register = new RateLimiter(10, 600_000);
+    /**
+     * Umumiy limit IP bo'yicha. O'zbekistonda mobil operatorlar ko'p abonentni bitta IP orqali chiqaradi (CGNAT),
+     * servisda ham bir nechta xodim bitta IP'da bo'ladi — shuning uchun limit yetarlicha keng.
+     */
+    private final RateLimiter general = new RateLimiter(300, 60_000);
+    private final RateLimiter register = new RateLimiter(30, 600_000);
     private final RateLimiter test = new RateLimiter(3, 600_000);
-    /** Admin parolini taxmin qilishdan himoya: 10 daqiqada 10 ta urinish. */
+    /** Admin parolini taxmin qilishdan himoya: 10 daqiqada 10 ta NOTO'G'RI urinish (to'g'ri kirishlar sanalmaydi). */
     private final RateLimiter login = new RateLimiter(10, 600_000);
 
     @Override
@@ -42,16 +46,21 @@ public class RateLimitFilter extends OncePerRequestFilter {
         boolean allowed = general.tryAcquire(ip);
         if (allowed && post && uri.equals("/api/cars")) allowed = register.tryAcquire(ip);
         if (allowed && post && uri.endsWith("/test")) allowed = test.tryAcquire(ip);
-        if (allowed && post && uri.equals("/api/admin/login")) allowed = login.tryAcquire(ip);
+        boolean loginCall = post && uri.equals("/api/admin/login");
+        if (allowed && loginCall && login.isLimited(ip)) allowed = false;
 
         if (!allowed) {
             res.setStatus(429);
             res.setContentType("application/json");
             res.setCharacterEncoding(StandardCharsets.UTF_8.name());
-            res.getWriter().write("{\"error\":\"Juda ko'p so'rov. Birozdan keyin urinib ko'ring.\"}");
+            res.getWriter().write(loginCall
+                    ? "{\"error\":\"Parol ko'p marta noto'g'ri kiritildi. 10 daqiqadan keyin urinib ko'ring.\"}"
+                    : "{\"error\":\"Juda ko'p so'rov. Bir daqiqadan keyin urinib ko'ring.\"}");
             return;
         }
         chain.doFilter(req, res);
+        // Faqat noto'g'ri login/parol hisobga olinadi
+        if (loginCall && res.getStatus() == 401) login.tryAcquire(ip);
     }
 
     @Scheduled(fixedDelay = 300_000)

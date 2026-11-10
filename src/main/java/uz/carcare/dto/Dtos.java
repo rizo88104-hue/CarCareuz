@@ -51,7 +51,9 @@ public final class Dtos {
             Integer mileage,
             Integer nextMileage,
             String note,
-            boolean active
+            boolean active,
+            /** Yozuvni kiritgan avtoservis nomi (mijozning o'zi kiritgan bo'lsa null). Bunday yozuvni mijoz o'chira olmaydi. */
+            String serviceName
     ) {
     }
 
@@ -67,7 +69,9 @@ public final class Dtos {
             boolean smsEnabled,
             boolean smsAvailable,
             int reminderDaysBefore,
-            List<RecordDto> records
+            List<RecordDto> records,
+            /** Servislardagi jamg'arma kartalari (sadoqat dasturi). */
+            List<uz.carcare.loyalty.LoyaltyDtos.PublicCard> loyalty
     ) {
     }
 

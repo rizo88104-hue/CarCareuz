@@ -77,6 +77,8 @@ body.has-scene { background: #0e2a33; }
 @media (prefers-reduced-motion: reduce) {
   .scene *, .scene { animation: none !important; }
 }
+  .scene *, .scene { animation: none !important; }
+}
 
 /* ============================================================
    Ichki sahifalar uchun fon rasmlari (bosh sahifa bilan bir uslubda).
@@ -115,3 +117,14 @@ body.scene-service {
   color: #fff; border-color: rgba(255, 255, 255, .35); background: rgba(8, 28, 35, .35);
 }
 .has-scene .tile { box-shadow: 0 10px 34px rgba(0, 0, 0, .3); }
+
+/* v3 sahifalari: kartochkadan tashqaridagi qo'shimcha elementlar */
+.has-scene .wrap > div > .btn-ghost,
+.has-scene #profBack {
+  color: #fff; border-color: rgba(255, 255, 255, .4); background: rgba(255, 255, 255, .08);
+}
+.has-scene .wrap > div > .empty,
+.has-scene #profTabBody > .empty,
+.has-scene #profMiddle > .empty,
+.has-scene #profSide > .empty { color: rgba(255, 255, 255, .85); }
+.has-scene footer { color: rgba(255, 255, 255, .8); }

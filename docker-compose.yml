@@ -1,0 +1,40 @@
+# CarCare — serverda ishga tushirish (PostgreSQL + ilova).
+# Ishga tushirish:  docker compose up -d --build
+# Loglar:           docker compose logs -f app
+# To'xtatish:       docker compose down        (ma'lumotlar pgdata ichida saqlanib qoladi)
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: carcare
+      POSTGRES_USER: carcare
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?.env faylida DB_PASSWORD ni yozing}
+      TZ: Asia/Tashkent
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U carcare -d carcare"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/carcare
+      DB_USER: carcare
+      DB_PASSWORD: ${DB_PASSWORD}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:?.env faylida SUPERADMIN_PASSWORD ni yozing}
+      JAVA_TOOL_OPTIONS: -Xms256m -Xmx768m
+    # Faqat serverning o'zidan ochiq — tashqaridan Nginx (HTTPS) orqali kiriladi
+    ports:
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  pgdata:

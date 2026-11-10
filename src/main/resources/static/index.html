@@ -93,11 +93,11 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
       });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error || 'Xatolik');
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || ('Server javob bermadi (kod ' + res.status + '). Birozdan keyin qayta urinib ko\'ring.'));
       location.href = '/car/' + body.token;
     } catch (err) {
-      show(err.message, 'err');
+      show(err instanceof TypeError ? "Server bilan aloqa yo'q. Internetni tekshirib, birozdan keyin qayta urinib ko'ring." : err.message, 'err');
       btn.disabled = false; btn.textContent = 'Davom etish →';
     }
   });

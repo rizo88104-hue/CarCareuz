@@ -131,6 +131,131 @@ loginlari dastur ishga tushganda avtomatik **direktor**ga aylantiriladi.
 «Tayyor, keling», yangi mijoz, xodim qo'shish va bloklash, parol tiklash, servisni o'chirish,
 mijozning ro'yxatdan o'tishi va botga ulanishi, kunlik eslatmalar natijasi.
 
+### Mijozlar bazasi
+
+Direktor va administrator panelida **«Mijozlar bazasi»** bo'limi bor. Unda servisga kamida bir
+marta kelgan barcha mashinalar ko'rinadi (boshqa servislarning mijozlari ko'rinmaydi).
+
+- **Qidiruv:** mashina raqami, ism, telefon yoki izoh bo'yicha.
+- **Filtrlar** (yonida soni): Muddati o'tgan · 7 kun ichida · Telegram yo'q · Boshqa joyga ketgan · Yangi (30 kun).
+- **Jadval:** egasi, telefon, tashriflar soni (bir kundagi bir nechta ish = 1 tashrif), oxirgi tashrif,
+  keyingi servis va holat.
+- **Mijoz kartasi** (qatorni bosing): ism, familiya, telefonni tahrirlash; **ichki izoh** (faqat shu servis
+  ko'radi, masalan «doimiy mijoz, 10% chegirma»); hozirgi servislar (sizda yoki boshqa joyda qilingani);
+  shu servisdagi to'liq tarix (sana, ish, usta, probeg).
+- **Excel'ga yuklab olish** (faqat direktor): `.csv` fayl, Excel to'g'ridan-to'g'ri ochadi.
+
+Super admin **«Mijozlar»** bo'limida butun tizimdagi mashinalarni qidiradi va har biri qaysi
+servislarda xizmat olganini ko'radi. Ma'lumot o'zgarishi, izoh yozish va yuklab olish faollik jurnaliga yoziladi.
+
+### Narx, to'lov va qarz daftari
+
+- **Ish kiritishda** (direktor, administrator): narx, hozir to'langan summa va to'lov turi
+  (naqd, karta, o'tkazma). To'langan summa narxdan kam bo'lsa, qolgani **qarzga** yoziladi va
+  to'lash muddati so'raladi. «Hozir to'landi» bo'sh qoldirilsa — to'liq to'landi deb hisoblanadi.
+  Usta narx kiritmaydi; uning ishiga administrator keyin **«Narx qo'yish»** orqali narx qo'yadi.
+- **Qarz daftari** bo'limi:
+  - kartalar: qarzdorlar soni (muddati o'tgan, to'lanmagan, qisman, to'langan), qarzlar summasi,
+    to'lovlar summasi, qarzlar qoldig'i;
+  - davr (barchasi, joriy yil, oy, hafta, bugun — ish sanasi bo'yicha), holat filtrlari va qidiruv;
+  - **«To'lash»** — to'liq yoki qisman to'lov qabul qilinadi, to'lovlar tarixi shu oynada ko'rinadi.
+- To'lov qabul qilinganda mijozning Telegramiga **kvitansiya** boradi: qancha to'landi, qoldiq qancha.
+- Barcha to'lovlar alohida saqlanadi (`payments` jadvali), o'zgartirilmaydi va jurnalga yoziladi.
+
+### Mijoz profili
+
+«Mijozlar bazasi»da qatorni yoki «Qarz daftari»da mijoz ismini bossangiz, to'liq profil ochiladi:
+
+- **Chapda:** ism, telefon, ro'yxatdan o'tgan sana, tug'ilgan kun, jinsi, Telegram bot holati
+  (ulanmagan bo'lsa **«Ulash»** — mijozga yuboriladigan havola), mashina raqami, mijoz qayerdan
+  kelgan (Instagram, tanish tavsiyasi ...), tashriflar. **«Tahrirlash»** shu ma'lumotlarni o'zgartiradi.
+- **O'rtada:** umumiy qarz, to'langan, qoldiq, kechikish kunlari; **«Qarzni so'ndirish»** — kiritilgan
+  summa mijozning ochiq qarzlariga avtomatik taqsimlanadi (avval muddati eng erta bo'lganiga);
+  ichki izoh.
+- **O'ngda:** jami xarajat, o'rtacha chek, oxirgi tashrif, hozirgi servislar.
+- **Pastda ikki tab:** «Servislar tarixi» (narx va to'lov bilan) va «Qarzlar va to'lovlar»
+  (qarzga qilingan ishlar + tranzaksiyalar tarixi).
+
+### Bosh sahifa (direktor va administrator)
+
+Panelga kirganda birinchi ochiladi: bugungi ishlar va tushum, qarzlar qoldig'i, 7 kun ichida
+keladiganlar; shu oyning **kunlik tushum grafigi** (to'lovlar bo'yicha); mijozlar (jami, yangi,
+qarzdorlar, tug'ilganlar — bosilsa tegishli ro'yxat ochiladi); eng katta qarzdorlar va
+**shu oy tug'ilgan kunlar** («Tabriklash» tugmasi bilan).
+
+### Mijozlar ro'yxati: qo'shimchalar
+
+- Kartalar: **jami, faol** (oxirgi 180 kunda kelgan), **nofaol, qayta kelganlar** (2+ tashrif).
+- Filtrlar: + Faol, Nofaol, Qayta kelgan, **Qora ro'yxat**; alohida **«🎂 Bu oy tug'ilgan kunlar»** tugmasi.
+- Har bir qatorda 📞 qo'ng'iroq va ✉️ Telegram xabar tugmalari.
+- **«+ Qo'shish»** — mijozni (ish kiritmasdan) qo'lda bazaga qo'shish.
+
+### Qora ro'yxat
+
+Direktor mijoz profilida **«⛔ Qora ro'yxatga»** tugmasi bilan sababini yozib qo'shadi
+(har bir servisning o'z qora ro'yxati). Keyin bu mashina raqami ish kiritishda yozilsa,
+qizil ogohlantirish chiqadi. Ro'yxatda va profilda belgi turadi. Chiqarish ham direktorda.
+
+### Telegram xabar
+
+Direktor va administrator mijozga bot orqali xabar yozadi (tayyor shablonlar: mashina tayyor,
+aksiya, tug'ilgan kun tabrigi, qarz haqida). Xabar boshiga servis nomi, oxiriga telefoni qo'shiladi.
+
+### Avtomatik bot xabarlari (har kuni 09:00)
+
+| Xabar | Qachon |
+|---|---|
+| Servis eslatmasi | Muddatga 7 kun qolganda va muddat kuni |
+| **Qarz eslatmasi** | To'lash muddatidan 1 kun oldin, muddat kuni, keyin har 7 kunda (bir servisdagi barcha qarzlar bitta xabarda) |
+| **Tug'ilgan kun tabrigi** | Tug'ilgan kuni, yiliga bir marta (29-fevral — kabisa bo'lmagan yilda 28-fevralda) |
+| To'lov kvitansiyasi | To'lov qabul qilinganda darhol (keshbek va balans bilan) |
+| **Tug'ilgan kun bonusi** | Sadoqat dasturi yoqilgan servislar — tabrik xabariga qo'shiladi |
+| **Ballar kuyishi** | 7 kun oldin ogohlantirish, muddat o'tgach ballar kuyadi |
+
+### Sadoqat dasturi (jamg'arma karta, bonus ballar, darajalar)
+
+Har bir servis o'zi yoqadi va sozlaydi (**🎁 Sadoqat** bo'limi, sozlamalarni faqat direktor o'zgartiradi).
+Dastur o'chiq bo'lsa, hech narsa o'zgarmaydi.
+
+- **Jamg'arma karta** — mijozga 8 xonali karta raqami beriladi (masalan `4021 3377`). Karta birinchi
+  ishda avtomatik ochiladi; profildan qo'lda yoki «Kartasi yo'qlarga karta ochish» tugmasi bilan hammaga ochish mumkin.
+  Har bir servisda karta alohida.
+- **Bonus ball (keshbek)** — 1 ball = 1 so'm. Har **pul bilan** to'lovdan (naqd, karta, o'tkazma) daraja foizicha ball yoziladi.
+  Qarzga qilingan ish uchun ball qarz to'langanda yoziladi. Ball bilan to'langan qismdan ball yozilmaydi.
+- **Ball bilan to'lash** — ish kiritishda («Ball bilan to'lash» maydoni) yoki to'lov oynasida «🎁 Bonus ball» usuli.
+  Bitta ish narxining ko'pi bilan belgilangan foizini (odatda 50%) ball bilan to'lash mumkin.
+  Ball bilan to'lov **tushumga qo'shilmaydi** (bosh sahifa grafigida ko'rinmaydi).
+- **Darajalar** — mijozning shu servisda pul bilan to'lagan jami summasiga qarab avtomatik oshadi:
+
+  | Daraja | Jami xarid (standart) | Keshbek | Doimiy chegirma |
+  |---|---|---|---|
+  | 🥉 Bronza | 0 dan | 3% | 0% |
+  | 🥈 Kumush | 3 000 000 so'mdan | 5% | 3% |
+  | 🥇 Oltin | 10 000 000 so'mdan | 7% | 5% |
+  | 💎 Platina | 25 000 000 so'mdan | 10% | 10% |
+
+  Raqamlarni direktor o'zgartiradi. Chegirma ish kiritishda narxdan avtomatik ayiriladi (belgini olib tashlab, qo'llamaslik mumkin).
+- **Bonuslar** — karta ochilganda (standart 10 000 ball) va tug'ilgan kunda (20 000 ball, yiliga bir marta).
+- **Kuyish** — mijoz belgilangan kun (standart 365) davomida kelmasa, ballari kuyadi; 7 kun oldin botdan ogohlantirish boradi.
+  Har qanday tashrif yoki to'lov muddatni yangilaydi. 0 — ballar hech qachon kuymaydi.
+- **Qo'lda tuzatish** — direktor profilda ball qo'shishi yoki ayirishi mumkin (sabab majburiy, jurnalga yoziladi, mijozga xabar boradi).
+- **Qora ro'yxatdagi mijozga** ball yozilmaydi va chegirma berilmaydi.
+- **Mijoz tomoni** — mashina sahifasida «Jamg'arma kartalarim» bloki; botda `/ball` buyrug'i.
+  Karta ochilishi, daraja oshishi, ball qo'shilishi va kuyishi haqida Telegramga xabar keladi.
+- **Dastur to'xtatilsa** — ballar saqlanib qoladi (kuymaydi ham), lekin yozilmaydi va ishlatilmaydi.
+- Ikki xodim bir vaqtda bitta kartadan ball yechsa, ikkinchisi rad etiladi (ball ikki marta sarflanmaydi).
+
+Sadoqat API (direktor va administrator; `PUT settings`, `issue-all`, `adjust` — faqat direktor):
+
+| Metod | Manzil | Vazifasi |
+|---|---|---|
+| GET | `/api/admin/center/loyalty?q=&level=` | Statistika, kartalar, oxirgi harakatlar |
+| GET/PUT | `/api/admin/center/loyalty/settings` | Dastur sozlamalari |
+| POST | `/api/admin/center/loyalty/issue-all` | Kartasi yo'qlarga karta ochish |
+| GET | `/api/admin/center/customers/{id}/loyalty` | Mijoz kartasi va ball tarixi |
+| POST | `/api/admin/center/customers/{id}/loyalty/card` | Karta ochish |
+| POST | `/api/admin/center/customers/{id}/loyalty/adjust` | Ball qo'shish/ayirish |
+
 ### Ish kiritish jarayoni
 - **Bajarilgan ishni kiritadi:** mashina raqamini yozadi → tizim egasini o'zi topadi. Mashina
   ro'yxatda bo'lmasa, egasining ism va telefonini kiritadi, mijoz avtomatik yaratiladi.
@@ -140,6 +265,12 @@ mijozning ro'yxatdan o'tishi va botga ulanishi, kunlik eslatmalar natijasi.
   Telegram ulanmagan bo'lsa, mijozning telefoni ko'rsatiladi. Telefonda bosilsa, qo'ng'iroq boshlanadi.
 - **Qo'ng'iroq ro'yxati** — muddati 7 kun ichida keladigan va o'tib ketgan mijozlar, telefonlari bilan.
 - Shu servis kiritgan ishlar bo'yicha eslatmalarda servis nomi va telefoni ham ko'rsatiladi.
+
+## Serverga chiqarish
+
+To'liq yo'riqnoma: **[DEPLOY.md](DEPLOY.md)** (Docker + PostgreSQL + Nginx + HTTPS + kunlik zaxira nusxa).
+
+Barcha chiqqan bot xabarlari `bot_messages` jadvaliga yoziladi — mijozga nima ketganini tekshirish mumkin.
 
 ## Spamdan himoya
 

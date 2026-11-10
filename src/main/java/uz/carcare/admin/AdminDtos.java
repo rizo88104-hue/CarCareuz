@@ -1,6 +1,7 @@
 package uz.carcare.admin;
 
 import jakarta.validation.constraints.*;
+import uz.carcare.model.Payment;
 import uz.carcare.model.ServiceType;
 import uz.carcare.model.StaffUser;
 
@@ -49,23 +50,63 @@ public final class AdminDtos {
     public record StaffUpdateRequest(Boolean blocked, String newPassword) {
     }
 
-    /** Servis xodimi ish kiritadi. Mashina ro'yxatda bo'lmasa, egasining ma'lumotlari ham kerak. */
+    /** Bitta tashrifdagi bitta ish (masalan: Motor moyi). Har biri alohida yozuv bo'lib saqlanadi. */
+    public record RecordItem(
+            ServiceType type,
+            @Size(max = 80, message = "Nomi juda uzun") String customName,
+            LocalDate nextDate,
+            @PositiveOrZero Integer nextMileage,
+            /** Shu ish narxi (chegirmagacha), so'mda. Usta uchun e'tiborga olinmaydi. */
+            @PositiveOrZero(message = "Narx manfiy bo'lmasin") Long price
+    ) {
+    }
+
+    /**
+     * Servis xodimi ish kiritadi. Mashina ro'yxatda bo'lmasa, egasining ma'lumotlari ham kerak.
+     * Bir tashrifda bir nechta ish: {@code items}. Eski format (bitta type/nextDate/price) ham qabul qilinadi.
+     */
     public record AdminRecordRequest(
             @NotBlank(message = "Mashina raqamini kiriting") String plateNumber,
             @Size(max = 60) String firstName,
             @Size(max = 60) String lastName,
             String phone,
-            @NotNull(message = "Servis turini tanlang") ServiceType type,
+            /** Eski format: bitta ish. items bo'sh bo'lsa ishlatiladi. */
+            ServiceType type,
             @Size(max = 80) String customName,
             @NotNull(message = "Bajarilgan sanani kiriting") LocalDate doneDate,
-            @NotNull(message = "Keyingi almashtirish sanasini kiriting") LocalDate nextDate,
+            LocalDate nextDate,
             @PositiveOrZero Integer mileage,
             @PositiveOrZero Integer nextMileage,
             @Size(max = 300) String note,
             /** Ishni qilgan usta (direktor/administrator tanlaydi). Usta uchun e'tiborga olinmaydi. */
             Long masterId,
-            boolean notifyReady
+            boolean notifyReady,
+            /** Narx, so'mda. Usta uchun e'tiborga olinmaydi. */
+            @PositiveOrZero(message = "Narx manfiy bo'lmasin") Long price,
+            /** Hozir to'langan summa. Narxdan kam bo'lsa, qolgani qarzga yoziladi. */
+            @PositiveOrZero(message = "To'lov manfiy bo'lmasin") Long paid,
+            Payment.Method paymentMethod,
+            /** Qarzni to'lash muddati (qarz bo'lsa majburiy). */
+            LocalDate payDueDate,
+            /** Sadoqat chegirmasini qo'llash (null — ha). price — chegirmagacha bo'lgan narx. */
+            Boolean applyDiscount,
+            /** Bonus ball bilan to'lanadigan summa (butun tashrif uchun). */
+            @PositiveOrZero(message = "Ball manfiy bo'lmasin") Long bonus,
+            /** Bir tashrifdagi ishlar (1–10 ta). price/paid/bonus shu holda jami summaga nisbatan. */
+            @Size(max = 10, message = "Bir tashrifda ko'pi bilan 10 ta ish") List<@jakarta.validation.Valid RecordItem> items
     ) {
+    }
+
+    /** Qarzni so'ndirish (to'lov qabul qilish). */
+    public record PaymentRequest(
+            @NotNull(message = "Summani kiriting") @Positive(message = "Summa noldan katta bo'lsin") Long amount,
+            Payment.Method method,
+            @Size(max = 200) String note
+    ) {
+    }
+
+    public record PaymentDto(Long id, long amount, String method, String methodLabel, String receivedBy,
+                             String note, Instant createdAt) {
     }
 
     // ---------- Javoblar ----------
@@ -77,7 +118,11 @@ public final class AdminDtos {
     public record CarLookupDto(
             boolean exists, String plateNumber, String plateDisplay,
             String firstName, String lastName, String phone, String phoneDisplay,
-            boolean telegramConnected, List<String> activeServices
+            boolean telegramConnected, List<String> activeServices,
+            /** Mijoz shu servisning qora ro'yxatida bo'lsa — sababi, aks holda null. */
+            String blacklistReason,
+            /** Sadoqat kartasi (dastur yo'q yoki usta uchun null). */
+            uz.carcare.loyalty.LoyaltyDtos.LookupLoyalty loyalty
     ) {
     }
 
@@ -85,11 +130,19 @@ public final class AdminDtos {
             Long id, String plateDisplay, String ownerName, String phone, String phoneDisplay,
             boolean telegramConnected, String serviceName, LocalDate doneDate, LocalDate nextDate,
             long daysLeft, Integer mileage, String note, String masterName, boolean active,
-            Instant readyNotifiedAt, String carUrl
+            Instant readyNotifiedAt, String carUrl,
+            /** Narx, to'langan va qoldiq (so'mda). Ustaga null. */
+            Long price, Long paid, Long remaining, LocalDate payDueDate,
+            /** Sadoqat chegirmasi va ball bilan to'langan summa. Ustaga null. */
+            Long discount, Long bonusPaid,
+            /** Mijoz (mashina) id — profil va sadoqat kartasi uchun. Ustaga null. */
+            Long carId
     ) {
     }
 
-    public record SaveResult(AdminRecordDto record, boolean carCreated, Boolean readyDelivered, String message) {
+    /** record — birinchi yozuv (eski mijozlar uchun), records — tashrifdagi barcha yozuvlar. */
+    public record SaveResult(AdminRecordDto record, boolean carCreated, Boolean readyDelivered, String message,
+                             List<AdminRecordDto> records) {
     }
 
     public record ReadyResult(boolean delivered, String phoneDisplay, String phone, String message) {

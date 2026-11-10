@@ -6,6 +6,7 @@ import uz.carcare.admin.AuditService;
 import uz.carcare.config.AppProperties;
 import uz.carcare.config.TelegramProperties;
 import uz.carcare.dto.Dtos.*;
+import uz.carcare.loyalty.LoyaltyService;
 import uz.carcare.model.Car;
 import uz.carcare.model.ServiceRecord;
 import uz.carcare.model.ServiceType;
@@ -32,10 +33,12 @@ public class CarService {
     private final AppProperties app;
     private final TelegramProperties telegram;
     private final AuditService audit;
+    private final LoyaltyService loyalty;
 
     public CarService(CarRepository cars, ServiceRecordRepository records, ReminderService reminders,
                       NotificationService notifications, SmsService sms,
-                      AppProperties app, TelegramProperties telegram, AuditService audit) {
+                      AppProperties app, TelegramProperties telegram, AuditService audit, LoyaltyService loyalty) {
+        this.loyalty = loyalty;
         this.audit = audit;
         this.cars = cars;
         this.records = records;
@@ -59,10 +62,12 @@ public class CarService {
         if (existing.isPresent()) {
             Car car = existing.get();
             if (!car.getPhone().equals(phone)) {
-                throw ApiException.conflict("Bu mashina raqami boshqa telefon raqam bilan ro'yxatdan o'tgan.");
+                throw ApiException.conflict("Bu mashina raqami boshqa telefon raqam bilan ro'yxatdan o'tgan. "
+                        + "Raqamingiz o'zgargan bo'lsa yoki mashinani yangi sotib olgan bo'lsangiz, avtoservisingizga "
+                        + "murojaat qiling — ular telefon raqamini yangilab beradi.");
             }
-            car.setFirstName(trim(req.firstName()));
-            car.setLastName(trim(req.lastName()));
+            // Ism-familiya ATAYLAB o'zgartirilmaydi: raqam va telefonni bilgan begona odam
+            // mijozning ismini almashtira olmasligi kerak (ismni avtoservis profildan tuzatadi).
             return new RegisterResponse(car.getToken(), app.carUrl(car.getToken()), true);
         }
 
@@ -129,6 +134,11 @@ public class CarService {
         Car car = find(token);
         ServiceRecord r = records.findByIdAndCar(id, car)
                 .orElseThrow(() -> ApiException.notFound("Yozuv topilmadi"));
+        if (r.getCenter() != null) {
+            // Avtoservis kiritgan ishda narx, to'lov, qarz va ballar bor — mijoz uni o'chira olmaydi
+            throw ApiException.badRequest("Bu yozuvni «" + r.getCenter().getName() + "» avtoservisi kiritgan, uni o'chirib bo'lmaydi. "
+                    + "Xato bo'lsa, avtoservisga murojaat qiling.");
+        }
         records.delete(r);
         return toDto(car);
     }
@@ -165,7 +175,9 @@ public class CarService {
         String digits = telegramPhone == null ? "" : telegramPhone.replaceAll("\\D", "");
         if (!digits.equals(car.getPhone())) {
             throw ApiException.badRequest("Telegram raqamingiz saytda ro'yxatdan o'tgan raqamga mos kelmadi ("
-                    + prettyPhone(car.getPhone()) + "). Saytda to'g'ri raqam bilan ro'yxatdan o'ting.");
+                    + prettyPhone(car.getPhone()) + "). Telegram shu raqamdagi akkauntdan ulanishi kerak. "
+                    + "Raqamingiz o'zgargan bo'lsa, avtoservisingizga murojaat qiling — ular raqamni yangilaydi, "
+                    + "keyin qayta ulaning.");
         }
         car.setTelegramChatId(chatId);
         audit.system(car.getFullName(), "Mijoz", null, prettyPlate(car.getPlateNumber()) + " egasi Telegram botga ulandi");
@@ -200,6 +212,17 @@ public class CarService {
         return sb.toString().trim();
     }
 
+    /** /ball — shu chatga ulangan mashinalarning jamg'arma kartalari. */
+    @Transactional(readOnly = true)
+    public String loyaltyText(long chatId) {
+        List<Car> list = cars.findAllByTelegramChatId(chatId);
+        if (list.isEmpty()) {
+            return "Sizda ulangan mashina yo'q.\nSaytda ro'yxatdan o'ting va mashina sahifasidagi "
+                    + "\"Telegramga ulash\" tugmasini bosing:\n" + app.baseUrl();
+        }
+        return loyalty.botText(list);
+    }
+
     // ---------- Yordamchi ----------
 
     private Car find(String token) {
@@ -213,12 +236,13 @@ public class CarService {
                         r.getId(), r.getType(), r.displayName(),
                         r.getDoneDate(), r.getNextDate(),
                         ChronoUnit.DAYS.between(today, r.getNextDate()),
-                        r.getMileage(), r.getNextMileage(), r.getNote(), r.isActive()))
+                        r.getMileage(), r.getNextMileage(), r.getNote(), r.isActive(),
+                        r.getCenter() == null ? null : r.getCenter().getName()))
                 .toList();
         return new CarDto(
                 car.getToken(), car.getFirstName(), car.getLastName(),
                 prettyPhone(car.getPhone()), car.getPlateNumber(), prettyPlate(car.getPlateNumber()),
                 car.getTelegramChatId() != null, telegram.deepLink(car.getToken()),
-                car.isSmsEnabled(), sms.enabled(), app.reminderDaysBefore(), list);
+                car.isSmsEnabled(), sms.enabled(), app.reminderDaysBefore(), list, loyalty.publicCards(car));
     }
 }

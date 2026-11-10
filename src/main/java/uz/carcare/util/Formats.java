@@ -57,6 +57,30 @@ public final class Formats {
         return plate;
     }
 
+    /** 1250000 → "1 250 000 so'm" */
+    public static String money(long v) {
+        return String.format(java.util.Locale.ROOT, "%,d", v).replace(',', ' ') + " so'm";
+    }
+
+    /** 12500 → "12 500 ball" (1 ball = 1 so'm). */
+    public static String points(long v) {
+        return String.format(java.util.Locale.ROOT, "%,d", v).replace(',', ' ') + " ball";
+    }
+
+    /** 40213377 → "4021 3377" */
+    public static String prettyCard(String card) {
+        return card == null || card.length() != 8 ? card : card.substring(0, 4) + " " + card.substring(4);
+    }
+
+    /** Bugun tug'ilgan kunmi. 29-fevralda tug'ilganlar kabisa bo'lmagan yilda 28-fevralda nishonlanadi. */
+    public static boolean isBirthday(LocalDate birth, LocalDate today) {
+        if (birth == null) return false;
+        if (birth.getMonthValue() == 2 && birth.getDayOfMonth() == 29 && !today.isLeapYear()) {
+            return today.getMonthValue() == 2 && today.getDayOfMonth() == 28;
+        }
+        return birth.getMonth() == today.getMonth() && birth.getDayOfMonth() == today.getDayOfMonth();
+    }
+
     public static String date(LocalDate d) {
         return d == null ? "" : d.format(DATE);
     }

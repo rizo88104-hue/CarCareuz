@@ -31,6 +31,17 @@ public class RateLimiter {
         }
     }
 
+    /** Limit to'lganmi (so'rovni hisobga qo'shmasdan tekshiradi). */
+    public boolean isLimited(String key) {
+        Deque<Long> q = hits.get(key);
+        if (q == null) return false;
+        long now = System.currentTimeMillis();
+        synchronized (q) {
+            while (!q.isEmpty() && now - q.peekFirst() > windowMs) q.pollFirst();
+            return q.size() >= max;
+        }
+    }
+
     /** Eskirgan kalitlarni xotiradan tozalaydi (vaqti-vaqti bilan chaqiriladi). */
     public void cleanup() {
         long now = System.currentTimeMillis();
