@@ -49,7 +49,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if (allowed && post && uri.equals("/api/cars")) allowed = register.tryAcquire(ip);
         if (allowed && post && uri.endsWith("/test")) allowed = test.tryAcquire(ip);
         if (allowed && post && uri.endsWith("/rotate")) allowed = rotate.tryAcquire(ip);
-        boolean loginCall = post && uri.equals("/api/admin/login");
+        boolean loginCall = post && (uri.equals("/api/admin/login") || uri.equals("/api/admin/login/verify"));
         if (allowed && loginCall && login.isLimited(ip)) allowed = false;
 
         if (!allowed) {

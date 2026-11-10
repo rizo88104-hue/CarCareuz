@@ -102,6 +102,15 @@ Birinchi ishga tushishda avtomatik yaratiladi. Login: `SUPERADMIN_USERNAME` (sta
 parol: `SUPERADMIN_PASSWORD`. Parol berilmasa, tasodifiy parol yaratilib **konsolga bir marta**
 chiqariladi. Kirgandan keyin "Parol" tugmasi orqali o'zgartiring.
 
+**Xavfsizlik (super admin uchun):**
+- **Ikki bosqichli tasdiq (2FA) Telegram orqali.** Panelda **🔐 Xavfsizlik → «Telegram'ga ulash»** →
+  bot ochiladi → START. Shundan keyin har kirishda login + paroldan so'ng Telegram'ga **6 xonali kod**
+  keladi (5 daqiqa amal qiladi, 5 ta noto'g'ri urinishdan keyin yonadi, bir marta ishlaydi). Xabarda
+  kirishga uringan IP ko'rsatiladi. O'chirish — panelda parol bilan; Telegram yo'qolsa bazada
+  `staff_users.telegram_chat_id` ni `null` qilish kifoya (DEPLOY.md).
+- **IP cheklovi.** `SUPERADMIN_ALLOWED_IPS=84.54.1.2, 10.0.0.0/8` berilsa, super admin faqat shu
+  manzillardan kira oladi va `/api/admin/super/**` faqat shu manzillardan ishlaydi. Bo'sh — cheklov yo'q.
+
 Super admin:
 - avtoservis qo'shadi (nomi, manzil, telefon) va uning **direktori** uchun login yaratadi.
   Qolgan xodimlarni direktor o'zi qo'shadi;
@@ -350,6 +359,9 @@ tushiring — ikkita nusxa bir botdan xabar olishga urinib, bir-biriga xalaqit b
 | POST | `/api/cars/{token}/test` | Sinov xabari |
 | POST | `/api/cars/{token}/rotate` | Havolani yangilash (yangi token qaytadi, eskisi o'chadi) |
 | GET | `/api/login/{code}` | Telegram orqali tasdiqlash holati: `pending / approved / denied / expired` |
+| POST | `/api/admin/login` | Xodim kirishi. Super admin 2FA yoqilgan bo'lsa `{ twoFactor: true, challenge }` qaytadi |
+| POST | `/api/admin/login/verify` | `{ challenge, code }` — Telegram'dagi 6 xonali kod, javobda sessiya tokeni |
+| GET / POST | `/api/admin/super/2fa`, `/super/2fa/disable` | 2FA holati va ulash havolasi; parol bilan o'chirish |
 
 ## Keyingi qadamlar (g'oyalar)
 

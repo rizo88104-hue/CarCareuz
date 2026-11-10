@@ -124,6 +124,15 @@
         <div class="field"><label for="lp">Parol</label><input id="lp" type="password" autocomplete="current-password" required></div>
         <button class="btn-block" type="submit">Kirish</button>
       </form>
+      <!-- 2-bosqich: Telegram'ga kelgan 6 xonali kod (super admin 2FA) -->
+      <form id="codeForm" class="hidden" novalidate>
+        <p class="hint" style="margin:0 0 12px">🔐 Telegram botga <b>6 xonali kod</b> yuborildi. Kod 5 daqiqa amal qiladi.</p>
+        <div class="field"><label for="lcode">Tasdiqlash kodi</label>
+          <input id="lcode" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="123456" required
+                 style="font-size:22px;letter-spacing:.3em;text-align:center"></div>
+        <button class="btn-block" type="submit">Tasdiqlash</button>
+        <button class="btn-ghost btn-block" type="button" id="codeBack" style="margin-top:8px">← Orqaga</button>
+      </form>
     </div>
   </div>
 
@@ -434,6 +443,31 @@
   <!-- ============ SUPER ADMIN: SERVISLAR ============ -->
   <div id="vSuper" class="hidden">
     <div class="tiles" id="sTiles"></div>
+
+    <!-- Super admin xavfsizligi: Telegram 2FA va IP cheklovi holati -->
+    <div class="card" id="secCard">
+      <h2>🔐 Xavfsizlik</h2>
+      <div id="secMsg" class="msg"></div>
+      <div class="status-row">
+        <div><b>Ikki bosqichli tasdiq (Telegram)</b>
+          <div class="hint" id="sec2faHint">Yuklanmoqda…</div></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <a id="sec2faLink" class="btn btn-tg btn-sm hidden" target="_blank" rel="noopener">Telegram'ga ulash</a>
+          <button id="sec2faOff" class="btn-ghost btn-sm hidden" type="button">O'chirish</button>
+        </div>
+      </div>
+      <form id="sec2faOffForm" class="hidden" novalidate style="border:1px dashed var(--line);border-radius:12px;padding:12px;margin-top:8px">
+        <div class="hint" style="margin-bottom:8px">2FA ni o'chirish uchun parolingizni kiriting.</div>
+        <div class="row">
+          <div class="field" style="margin:0"><input id="sec2faPw" type="password" autocomplete="current-password" placeholder="Parol"></div>
+          <div class="field" style="margin:0"><button type="submit" class="btn-block">2FA ni o'chirish</button></div>
+        </div>
+      </form>
+      <div class="status-row">
+        <div><b>IP cheklovi</b>
+          <div class="hint" id="secIpHint"></div></div>
+      </div>
+    </div>
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
         <h2 style="margin:0">Avtoservislar</h2>
@@ -548,14 +582,67 @@
     if (k === 'loyalty') loadLoyalty();
   }
 
+  // Kirish: 1-bosqich login + parol. Super admin 2FA yoqilgan bo'lsa server challenge qaytaradi,
+  // 2-bosqichda Telegram'dagi 6 xonali kod /login/verify ga yuboriladi.
+  let loginChallenge = null;
+  function showCodeStep(on) {
+    show('loginForm', !on); show('codeForm', on);
+    if (on) { $('lcode').value = ''; $('lcode').focus(); }
+  }
   $('loginForm').onsubmit = async (e) => {
     e.preventDefault();
     try {
       const r = await api('/login', { method: 'POST', body: JSON.stringify({ username: $('lu').value, password: $('lp').value }) });
-      setToken(r.token); $('lp').value = ''; $('loginMsg').className = 'msg';
+      $('lp').value = ''; $('loginMsg').className = 'msg';
+      if (r.twoFactor) { loginChallenge = r.challenge; showCodeStep(true); return; }
+      setToken(r.token);
       start();
     } catch (err) { flash('loginMsg', err.message, 'err'); }
   };
+  $('codeForm').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const r = await api('/login/verify', { method: 'POST', body: JSON.stringify({ challenge: loginChallenge, code: $('lcode').value }) });
+      loginChallenge = null; showCodeStep(false); $('loginMsg').className = 'msg';
+      setToken(r.token);
+      start();
+    } catch (err) {
+      flash('loginMsg', err.message, 'err');
+      // Kod eskirgan yoki urinishlar tugagan — login/parolga qaytamiz
+      if (/eskirgan|muddati|tugadi/i.test(err.message)) { loginChallenge = null; showCodeStep(false); }
+    }
+  };
+  $('codeBack').onclick = () => { loginChallenge = null; showCodeStep(false); $('loginMsg').className = 'msg'; };
+
+  // ---- Super admin: 2FA holati ----
+  async function loadTwoFactor() {
+    try {
+      const s = await api('/super/2fa');
+      $('sec2faHint').textContent = s.enabled
+          ? (s.active ? 'Yoqilgan ✅ Har kirishda Telegram\'ga 6 xonali kod keladi.'
+                      : 'Ulangan, lekin bot hozir o\'chiq (TELEGRAM_BOT_TOKEN yo\'q) — kod talab qilinmaydi.')
+          : (s.linkUrl ? 'O\'chiq. Yoqish uchun «Telegram\'ga ulash» → botda START bosing. Shundan keyin parol yetarli bo\'lmaydi.'
+                       : 'Bot sozlanmagan (TELEGRAM_BOT_TOKEN / TELEGRAM_BOT_USERNAME), 2FA ni yoqib bo\'lmaydi.');
+      show('sec2faLink', !s.enabled && !!s.linkUrl);
+      if (s.linkUrl) $('sec2faLink').href = s.linkUrl;
+      show('sec2faOff', s.enabled);
+      show('sec2faOffForm', false);
+      $('secIpHint').textContent = s.ipRestricted
+          ? 'Yoqilgan ✅ Super admin faqat SUPERADMIN_ALLOWED_IPS dagi manzillardan kira oladi.'
+          : 'O\'chiq. Yoqish uchun .env da SUPERADMIN_ALLOWED_IPS=IP1, IP2 yozib, ilovani qayta ishga tushiring.';
+    } catch (e) { $('sec2faHint').textContent = e.message; }
+  }
+  $('sec2faOff').onclick = () => { $('sec2faOffForm').classList.toggle('hidden'); $('sec2faPw').value = ''; $('sec2faPw').focus(); };
+  $('sec2faOffForm').onsubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api('/super/2fa/disable', { method: 'POST', body: JSON.stringify({ password: $('sec2faPw').value }) });
+      flash('secMsg', 'Ikki bosqichli tasdiq o\'chirildi');
+      loadTwoFactor();
+    } catch (err) { flash('secMsg', err.message, 'err'); }
+  };
+  // Telegram'da START bosib qaytganda holatni yangilash
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && me && tab === 'super') loadTwoFactor(); });
   $('logout').onclick = async () => { try { await api('/logout', { method: 'POST' }); } catch (e) {} setToken(null); start(); };
   $('pwToggle').onclick = () => $('pwCard').classList.toggle('hidden');
   $('pwForm').onsubmit = async (e) => {
@@ -1607,6 +1694,7 @@
   }
 
   async function loadSuper() {
+    loadTwoFactor();
     try {
       const o = await api('/super/overview');
       $('sTiles').innerHTML = [

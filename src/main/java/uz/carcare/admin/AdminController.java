@@ -1,5 +1,6 @@
 package uz.carcare.admin;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -36,8 +37,14 @@ public class AdminController {
     // ---------- Kirish ----------
 
     @PostMapping("/login")
-    public AdminAuthService.LoginResult login(@RequestBody LoginRequest req) {
-        return auth.login(req.username(), req.password());
+    public AdminAuthService.LoginResult login(@RequestBody LoginRequest req, HttpServletRequest http) {
+        return auth.login(req.username(), req.password(), http.getRemoteAddr());
+    }
+
+    /** 2-bosqich: Telegram'ga kelgan 6 xonali kod (super admin 2FA). */
+    @PostMapping("/login/verify")
+    public AdminAuthService.LoginResult verify(@RequestBody LoginVerifyRequest req, HttpServletRequest http) {
+        return auth.verifyCode(req.challenge(), req.code(), http.getRemoteAddr());
     }
 
     @PostMapping("/logout")
@@ -114,6 +121,20 @@ public class AdminController {
     public SuperOverview overview(@RequestHeader(value = AUTH, required = false) String h) {
         auth.requireSuper(h);
         return service.overview();
+    }
+
+    /** Ikki bosqichli tasdiq holati va Telegram'ga ulash havolasi. */
+    @GetMapping("/super/2fa")
+    public AdminAuthService.TwoFactorStatus twoFactor(@RequestHeader(value = AUTH, required = false) String h) {
+        return auth.twoFactorStatus(auth.requireSuper(h).staffId());
+    }
+
+    /** 2FA ni o'chirish — parol bilan. */
+    @PostMapping("/super/2fa/disable")
+    public Map<String, Boolean> disableTwoFactor(@RequestHeader(value = AUTH, required = false) String h,
+                                                 @RequestBody PasswordConfirmRequest req) {
+        auth.disableTwoFactor(auth.requireSuper(h).staffId(), req.password());
+        return Map.of("ok", true);
     }
 
     @PostMapping("/super/centers")

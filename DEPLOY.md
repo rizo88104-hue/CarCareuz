@@ -57,8 +57,17 @@ Quyidagilarni albatta to'ldiring:
 | `SUPERADMIN_PASSWORD` | Sizning parolingiz: kamida 12 belgi, harf va raqam |
 | `TELEGRAM_BOT_TOKEN` | @BotFather bergan token |
 | `TELEGRAM_BOT_USERNAME` | Bot nomi, @ belgisisiz |
+| `SUPERADMIN_ALLOWED_IPS` | Ixtiyoriy. Super admin faqat shu IP lardan kira oladi: `84.54.1.2, 10.0.0.0/8`. Bo'sh — cheklov yo'q |
 
 `.env` faylini hech kimga yubormang.
+
+**Super admin uchun ikki bosqichli tasdiq (2FA).** Birinchi kirgandan keyin **Super admin → 🔐 Xavfsizlik →
+«Telegram'ga ulash»** tugmasini bosing: bot ochiladi, START bosilgach 2FA yoqiladi. Shundan keyin har kirishda
+login + paroldan so'ng Telegram'ga 6 xonali kod keladi. Telegram'ga kirish yo'qolsa, serverda 2FA ni qo'lda o'chirish:
+
+```bash
+docker compose exec db psql -U carcare -d carcare -c "update staff_users set telegram_chat_id = null where role = 'SUPER_ADMIN'"
+```
 
 ## 5. Ishga tushirish
 

@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import uz.carcare.admin.AdminTwoFactorService;
 import uz.carcare.config.AppProperties;
 import uz.carcare.model.Car;
 import uz.carcare.util.RateLimiter;
@@ -40,6 +41,7 @@ public class TelegramBotPoller {
     private final TelegramClient telegram;
     private final CarService cars;
     private final CustomerLoginService login;
+    private final AdminTwoFactorService adminTwoFactor;
     private final AppProperties app;
 
     private final RateLimiter perUser = new RateLimiter(15, 60_000);
@@ -50,10 +52,12 @@ public class TelegramBotPoller {
     private long offset = 0;
     private boolean initialized = false;
 
-    public TelegramBotPoller(TelegramClient telegram, CarService cars, CustomerLoginService login, AppProperties app) {
+    public TelegramBotPoller(TelegramClient telegram, CarService cars, CustomerLoginService login,
+                             AdminTwoFactorService adminTwoFactor, AppProperties app) {
         this.telegram = telegram;
         this.cars = cars;
         this.login = login;
+        this.adminTwoFactor = adminTwoFactor;
         this.app = app;
     }
 
@@ -117,6 +121,11 @@ public class TelegramBotPoller {
             String token = text.length() > 6 ? text.substring(6).trim() : "";
             if (token.isEmpty()) {
                 telegram.sendMessage(chatId, welcome(name));
+                return;
+            }
+            // Super admin 2FA ni ulash: /start adm_KOD (panelda «Telegram'ga ulash» tugmasidan)
+            if (token.startsWith("adm_")) {
+                telegram.sendMessage(chatId, adminTwoFactor.link(token.substring(4), chatId), TelegramClient.removeKeyboard());
                 return;
             }
             String plate = cars.plateByToken(token);

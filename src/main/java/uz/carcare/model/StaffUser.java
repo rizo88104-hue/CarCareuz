@@ -66,6 +66,12 @@ public class StaffUser {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    /** Ikki bosqichli tasdiq uchun Telegram chati (super admin). null — 2FA o'chiq. */
+    private Long telegramChatId;
+
+    public Long getTelegramChatId() { return telegramChatId; }
+    public void setTelegramChatId(Long telegramChatId) { this.telegramChatId = telegramChatId; }
+
     public String displayName() {
         return fullName == null || fullName.isBlank() ? username : fullName;
     }

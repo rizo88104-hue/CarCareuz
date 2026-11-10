@@ -19,7 +19,15 @@ public final class AdminDtos {
     public record LoginRequest(String username, String password) {
     }
 
+    /** 2FA: /login javobidagi challenge + Telegram'dagi 6 xonali kod. */
+    public record LoginVerifyRequest(String challenge, String code) {
+    }
+
     public record PasswordRequest(String oldPassword, String newPassword) {
+    }
+
+    /** Xavfli amalni (masalan 2FA ni o'chirish) parol bilan tasdiqlash. */
+    public record PasswordConfirmRequest(String password) {
     }
 
     /** Super admin yangi servis qo'shadi: servis + uning direktori. */
