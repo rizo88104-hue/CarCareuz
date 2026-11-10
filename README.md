@@ -84,6 +84,23 @@ ichida *Environment variables* ga yuqoridagi ikki o'zgaruvchini qo'shing.
 - **Server matnlari**: `src/main/resources/i18n/messages_uz.properties` va `messages_ru.properties`
   (`I18n.t("kalit", args)`, qoliplar `{0}`). Validatsiya xabarlari DTO larda `{v.kalit}` ko'rinishida.
 
+## Baza sxemasi: Flyway migratsiyalari
+
+Sxema `ddl-auto=update` bilan emas, **Flyway** skriptlari bilan boshqariladi: `src/main/resources/db/migration/`.
+Hibernate faqat tekshiradi (`ddl-auto=validate`): entity va jadval mos kelmasa ilova ishga tushmaydi —
+xato serverda emas, ishga tushirishda ko'rinadi.
+
+- `V1__init.sql` — to'liq sxema, hamma joyda `if not exists`. **Eski bazalar** (Hibernate yaratgan) uchun
+  Flyway `baseline-on-migrate` bilan 0-versiyadan boshlaydi: mavjud jadvallar o'tkazib yuboriladi, yetishmagan
+  ustunlar qo'shiladi, `flyway_schema_history` jadvali paydo bo'ladi. Ma'lumotlar o'chmaydi.
+- **Yangi o'zgarish** kerak bo'lsa: entity ni o'zgartiring va `V2__qisqa_nomi.sql` yarating (masalan
+  `alter table cars add column vin varchar(17);`). Mavjud V-fayllarni **o'zgartirmang** — Flyway ularning
+  nazorat summasini tekshiradi. Enum ustunlar `varchar`, CHECK siz — yangi enum qiymati uchun migratsiya shart emas.
+- Testlar (`mvn test`) xotiradagi H2 da migratsiyalarni bajarib, `validate` orqali sxema va entity mosligini
+  tekshiradi — migratsiyani unutib qo'yish testlarda ko'rinadi.
+- Favqulodda vaziyatda tekshiruvni o'chirish: `DDL_AUTO=none` (sxema o'zgarmaydi, faqat validate o'chadi).
+- Yangilashdan oldin zaxira nusxa oling (`deploy/backup.sh`) — migratsiya qaytarilmaydi.
+
 ## Avtomatik testlar
 
 ```bash

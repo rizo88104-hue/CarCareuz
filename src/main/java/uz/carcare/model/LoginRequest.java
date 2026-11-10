@@ -30,6 +30,7 @@ public class LoginRequest {
     private Car car;
 
     @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
     @Column(nullable = false, length = 10)
     private Status status = Status.PENDING;
 

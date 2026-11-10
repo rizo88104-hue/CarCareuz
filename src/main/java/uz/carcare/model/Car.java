@@ -77,6 +77,7 @@ public class Car {
     private java.time.LocalDate birthDate;
 
     @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
     @Column(length = 10)
     private Gender gender;
 

@@ -41,6 +41,16 @@
             <artifactId>spring-security-crypto</artifactId>
         </dependency>
 
+        <!-- Baza sxemasi migratsiyalari: src/main/resources/db/migration/V*__*.sql (ddl-auto=update o'rniga) -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
         <!-- QR kod (Telegram botga ulash havolasi — chek va ekran uchun) -->
         <dependency>
             <groupId>com.google.zxing</groupId>

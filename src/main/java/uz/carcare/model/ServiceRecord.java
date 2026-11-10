@@ -25,6 +25,7 @@ public class ServiceRecord {
     private Car car;
 
     @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
     @Column(nullable = false, length = 30)
     private ServiceType type;
 

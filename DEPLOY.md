@@ -131,8 +131,11 @@ gunzip -c /var/backups/carcare/FAYL.sql.gz | docker compose exec -T db psql -U c
 | To'xtatish | `docker compose down` (ma'lumotlar o'chmaydi) |
 | Holat | `docker compose ps` |
 
-Yangi versiyada qo'shilgan jadval va ustunlar ishga tushganda avtomatik qo'shiladi.
-Shunga qaramay, har yangilashdan oldin `deploy/backup.sh` ni qo'lda ishga tushirib qo'ying.
+Yangi versiyadagi jadval va ustunlar ishga tushganda **Flyway migratsiyalari** (`db/migration/V*.sql`) orqali
+qo'shiladi; `flyway_schema_history` jadvalida qaysi versiya qo'llangani yoziladi. Eski bazada (Hibernate yaratgan)
+birinchi ishga tushishda baseline qilinadi — ma'lumotlar saqlanadi. Migratsiya xato bersa ilova ishga tushmaydi,
+logda sabab ko'rinadi (`docker compose logs app`). Shuning uchun har yangilashdan oldin `deploy/backup.sh` ni
+qo'lda ishga tushirib qo'ying — migratsiya qaytarilmaydi.
 
 ## 10. Muhim eslatmalar
 

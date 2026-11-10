@@ -57,6 +57,7 @@ public class LoyaltyAccount {
     private long spendTotal;
 
     @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
     @Column(nullable = false, length = 12)
     private LoyaltyLevel level = LoyaltyLevel.BRONZE;
 

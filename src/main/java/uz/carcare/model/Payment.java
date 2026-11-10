@@ -58,6 +58,7 @@ public class Payment {
     private long amount;
 
     @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
     @Column(nullable = false, length = 20)
     private Method method;
 
