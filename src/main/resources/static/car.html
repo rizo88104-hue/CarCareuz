@@ -63,6 +63,20 @@
       </div>
     </div>
 
+    <!-- Xavfsizlik: qayta kirishni tasdiqlash va havolani yangilash -->
+    <div class="card">
+      <h2>🔐 Xavfsizlik</h2>
+      <div class="status-row">
+        <div><b>Qayta kirish</b>
+          <div class="hint" id="secHint"></div></div>
+      </div>
+      <div class="status-row">
+        <div><b>Sahifa havolasi</b>
+          <div class="hint">Havola begonaga tushgan deb o'ylasangiz, uni yangilang — eski havola darhol ishlamay qoladi.</div></div>
+        <button class="btn-ghost btn-sm" id="rotateBtn" type="button">🔄 Havolani yangilash</button>
+      </div>
+    </div>
+
     <!-- Faol servislar -->
     <div class="card">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -134,7 +148,7 @@
 
 <script>
   const $ = (id) => document.getElementById(id);
-  const token = location.pathname.startsWith('/car/')
+  let token = location.pathname.startsWith('/car/')
       ? decodeURIComponent(location.pathname.split('/')[2] || '')
       : new URLSearchParams(location.search).get('t');
   let car = null;
@@ -194,6 +208,9 @@
     $('smsHint').textContent = !c.smsAvailable ? "Hozircha mavjud emas"
         : c.smsEnabled ? c.phone + ' raqamiga keladi' : "O'chirilgan";
     $('ruleHint').textContent = 'Muddatga ' + c.reminderDaysBefore + ' kun qolganda va muddat kuni eslatamiz.';
+    $('secHint').textContent = c.telegramConnected
+        ? 'Telefon + mashina raqami bilan qayta kirish faqat siz Telegram botda «Ha, bu men» ni bosganingizda ishlaydi ✅'
+        : 'Hozir telefon + mashina raqamini bilgan har kim sahifaga kira oladi. Telegramga ulansangiz, qayta kirish faqat sizning tasdig\'ingiz bilan bo\'ladi.';
 
     const active = c.records.filter(r => r.active);
     const history = c.records.filter(r => !r.active);
@@ -318,6 +335,21 @@
   $('testBtn').onclick = async () => {
     try { await api('/test', { method: 'POST' }); flash('Sinov xabari yuborildi ✅'); }
     catch (err) { flash(err.message, 'err'); }
+  };
+
+  // Havolani yangilash: yangi maxfiy kalit, eski havola (va saqlangan havolalar) ishlamay qoladi
+  $('rotateBtn').onclick = async () => {
+    if (!confirm('Havola yangilansinmi?\n\nEski havola darhol ishlamay qoladi. Saqlab qo\'ygan havolangiz bo\'lsa, yangisini qayta saqlashingiz kerak.')) return;
+    $('rotateBtn').disabled = true;
+    try {
+      const c = await api('/rotate', { method: 'POST' });
+      token = c.token;
+      history.replaceState(null, '', '/car/' + encodeURIComponent(token));
+      render(c);
+      flash('Havola yangilandi ✅ Eski havola endi ishlamaydi. Bu sahifani qayta saqlab qo\'ying' + (c.telegramConnected ? ' — yangi havola Telegramga ham yuborildi.' : '.'));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch (err) { flash(err.message, 'err'); }
+    $('rotateBtn').disabled = false;
   };
 
   // Telegramga ulangandan keyin sahifaga qaytganda holatni yangilash

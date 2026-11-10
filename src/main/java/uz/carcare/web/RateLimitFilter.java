@@ -28,6 +28,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private final RateLimiter general = new RateLimiter(300, 60_000);
     private final RateLimiter register = new RateLimiter(30, 600_000);
     private final RateLimiter test = new RateLimiter(3, 600_000);
+    /** Havolani yangilash: 10 daqiqada 5 ta (har biri egasiga Telegram xabari yuboradi). */
+    private final RateLimiter rotate = new RateLimiter(5, 600_000);
     /** Admin parolini taxmin qilishdan himoya: 10 daqiqada 10 ta NOTO'G'RI urinish (to'g'ri kirishlar sanalmaydi). */
     private final RateLimiter login = new RateLimiter(10, 600_000);
 
@@ -46,6 +48,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         boolean allowed = general.tryAcquire(ip);
         if (allowed && post && uri.equals("/api/cars")) allowed = register.tryAcquire(ip);
         if (allowed && post && uri.endsWith("/test")) allowed = test.tryAcquire(ip);
+        if (allowed && post && uri.endsWith("/rotate")) allowed = rotate.tryAcquire(ip);
         boolean loginCall = post && uri.equals("/api/admin/login");
         if (allowed && loginCall && login.isLimited(ip)) allowed = false;
 
@@ -68,6 +71,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
         general.cleanup();
         register.cleanup();
         test.cleanup();
+        rotate.cleanup();
         login.cleanup();
     }
 }

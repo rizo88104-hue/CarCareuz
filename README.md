@@ -70,7 +70,12 @@ ichida *Environment variables* ga yuqoridagi ikki o'zgaruvchini qo'shing.
 ## 3. Qanday ishlaydi
 
 1. `/` — foydalanuvchi ma'lumot kiritadi → `/car/{maxfiy-kalit}` sahifasi ochiladi.
-   Shu raqam + telefon bilan qayta kirsa, o'sha sahifaga qaytadi.
+   Shu raqam + telefon bilan qayta kirsa, o'sha sahifaga qaytadi. **Mashina Telegramga ulangan
+   bo'lsa**, havola darhol berilmaydi: egasiga botda «Bu sizmisiz?» xabari (✅ Ha, bu men / ❌ Yo'q)
+   keladi, sayt esa 5 daqiqagacha javobni kutadi. Telefon va raqamni bilgan begona odam kira olmaydi.
+   «Yo'q» bosilsa, botda **«🔄 Havolani yangilash»** tugmasi chiqadi.
+   Sahifadagi **🔐 Xavfsizlik → «Havolani yangilash»** tugmasi ham maxfiy kalitni almashtiradi —
+   eski havola darhol ishlamay qoladi, yangi havola Telegramga yuboriladi.
 2. Sahifada **"Telegramga ulash"** → `t.me/Bot?start=KALIT` ochiladi → START → bot
    **"📱 Raqamni yuborish"** tugmasini ko'rsatadi. Telegram raqami saytdagi raqamga mos
    kelsagina mashina ulanadi — bu SMS kodsiz, **bepul tasdiqlash**.
@@ -343,10 +348,11 @@ tushiring — ikkita nusxa bir botdan xabar olishga urinib, bir-biriga xalaqit b
 | POST | `/api/cars/{token}/records` | Servis qo'shish |
 | DELETE | `/api/cars/{token}/records/{id}` | Servis o'chirish |
 | POST | `/api/cars/{token}/test` | Sinov xabari |
+| POST | `/api/cars/{token}/rotate` | Havolani yangilash (yangi token qaytadi, eskisi o'chadi) |
+| GET | `/api/login/{code}` | Telegram orqali tasdiqlash holati: `pending / approved / denied / expired` |
 
 ## Keyingi qadamlar (g'oyalar)
 
-- Saytga kirishni ham Telegram orqali tasdiqlash (hozir sahifa maxfiy havola orqali ochiladi)
 - Admin panel: barcha mashinalar, statistika, ommaviy xabar
 - Botning o'zidan servis qo'shish ("Moy almashtirdim" tugmasi)
 - Servis turlari uchun standart muddatlar (moy — 6 oy / 10 000 km)

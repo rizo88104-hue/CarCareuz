@@ -38,7 +38,22 @@ public final class Dtos {
 
     // ---------- Javoblar ----------
 
-    public record RegisterResponse(String token, String carUrl, boolean existing) {
+    /**
+     * Ro'yxatdan o'tish / qayta kirish javobi. Telegram orqali tasdiqlash kerak bo'lsa,
+     * token bo'sh keladi va confirmCode beriladi — brauzer /api/login/{code} ni so'rab turadi.
+     */
+    public record RegisterResponse(String token, String carUrl, boolean existing, String confirmCode, String botUrl) {
+        public static RegisterResponse ready(String token, String carUrl, boolean existing) {
+            return new RegisterResponse(token, carUrl, existing, null, null);
+        }
+
+        public static RegisterResponse confirm(String code, String botUrl) {
+            return new RegisterResponse(null, null, true, code, botUrl);
+        }
+    }
+
+    /** Kirish so'rovi holati: pending / approved / denied / expired. Havola faqat approved da. */
+    public record LoginStatusDto(String status, String token, String carUrl) {
     }
 
     public record RecordDto(

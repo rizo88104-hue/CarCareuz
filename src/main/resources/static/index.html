@@ -44,10 +44,24 @@
       <div class="field">
         <label for="plateNumber">Mashina raqami</label>
         <input id="plateNumber" name="plateNumber" class="plate" placeholder="01 A 123 BC" required maxlength="14">
-        <div class="hint">Oldin ro'yxatdan o'tgan bo'lsangiz, xuddi shu raqam va telefon bilan sahifangizga qayta kirasiz.</div>
+        <div class="hint">Oldin ro'yxatdan o'tgan bo'lsangiz, xuddi shu raqam va telefon bilan sahifangizga qayta kirasiz.
+          Telegram ulangan bo'lsa, kirishni botda «Ha, bu men» tugmasi bilan tasdiqlaysiz.</div>
       </div>
       <button id="submit" class="btn-block" type="submit">Davom etish →</button>
     </form>
+  </div>
+
+  <!-- Telegram orqali tasdiqlash kutilmoqda -->
+  <div id="confirm" class="card hidden">
+    <h2>🔐 Telegram'da tasdiqlang</h2>
+    <p class="lead" style="margin-top:0">Bu mashina Telegram botga ulangan. Egasiga «Bu sizmisiz?» degan xabar yubordik.
+      Botda <b>«✅ Ha, bu men»</b> tugmasini bosing — sahifa shu yerda o'zi ochiladi.</p>
+    <div id="confirmMsg" class="msg"></div>
+    <div class="btns" style="display:flex;gap:10px;flex-wrap:wrap">
+      <a id="confirmBot" class="btn btn-tg" target="_blank" rel="noopener">Telegram botni ochish</a>
+      <button id="confirmCancel" class="btn-ghost" type="button">Bekor qilish</button>
+    </div>
+    <div class="hint" id="confirmHint" style="margin-top:12px">Kutilmoqda… So'rov 5 daqiqa amal qiladi.</div>
   </div>
 
   <div id="recent" class="card hidden">
@@ -95,12 +109,52 @@
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error || ('Server javob bermadi (kod ' + res.status + '). Birozdan keyin qayta urinib ko\'ring.'));
+      if (body.confirmCode) { waitForConfirm(body.confirmCode, body.botUrl); return; }
       location.href = '/car/' + body.token;
     } catch (err) {
       show(err instanceof TypeError ? "Server bilan aloqa yo'q. Internetni tekshirib, birozdan keyin qayta urinib ko'ring." : err.message, 'err');
       btn.disabled = false; btn.textContent = 'Davom etish →';
     }
   });
+
+  // ---------- Qayta kirishni Telegram orqali tasdiqlash ----------
+  // Mashina botga ulangan bo'lsa server havolani darhol bermaydi: egasi botda «Ha, bu men» ni
+  // bosishini kutamiz (har 2 soniyada holatni so'raymiz, 5 daqiqagacha).
+  let confirmTimer = null;
+  function waitForConfirm(code, botUrl) {
+    form.closest('.card').classList.add('hidden');
+    $('recent').classList.add('hidden');
+    $('confirm').classList.remove('hidden');
+    $('confirmMsg').className = 'msg';
+    $('confirmHint').textContent = 'Kutilmoqda… So\'rov 5 daqiqa amal qiladi.';
+    if (botUrl) { $('confirmBot').href = botUrl; $('confirmBot').classList.remove('hidden'); }
+    else $('confirmBot').classList.add('hidden');
+
+    const until = Date.now() + 5 * 60 * 1000;
+    const fail = (text) => {
+      $('confirmHint').textContent = '';
+      $('confirmMsg').textContent = text; $('confirmMsg').className = 'msg show err';
+    };
+    const tick = async () => {
+      try {
+        const r = await fetch('/api/login/' + encodeURIComponent(code));
+        const s = await r.json().catch(() => ({}));
+        if (!r.ok) return fail(s.error || 'So\'rov topilmadi. Qayta urinib ko\'ring.');
+        if (s.status === 'approved') { location.href = '/car/' + s.token; return; }
+        if (s.status === 'denied') return fail('Kirish Telegram\'da rad etildi. Agar bu siz bo\'lsangiz, qayta urinib, botda «Ha, bu men» ni bosing.');
+        if (s.status !== 'pending') return fail('Tasdiqlash vaqti tugadi. Qayta urinib ko\'ring.');
+      } catch (e) { /* aloqa uzilsa — keyingi urinishda qayta so'raymiz */ }
+      if (Date.now() < until) confirmTimer = setTimeout(tick, 2000);
+      else fail('Tasdiqlash vaqti tugadi. Qayta urinib ko\'ring.');
+    };
+    confirmTimer = setTimeout(tick, 1500);
+  }
+  $('confirmCancel').onclick = () => {
+    clearTimeout(confirmTimer);
+    $('confirm').classList.add('hidden');
+    form.closest('.card').classList.remove('hidden');
+    btn.disabled = false; btn.textContent = 'Davom etish →';
+  };
 </script>
 </body>
 </html>

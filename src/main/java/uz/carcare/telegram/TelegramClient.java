@@ -181,6 +181,46 @@ public class TelegramClient {
                 .body(JsonNode.class);
     }
 
+    /** Yuborilgan xabar matnini (va tugmalarini) o'zgartiradi — masalan tugma bosilgach natijani yozish uchun. */
+    public boolean editMessageText(long chatId, long messageId, String html, Map<String, Object> replyMarkup) {
+        if (!enabled()) return false;
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("chat_id", chatId);
+        body.put("message_id", messageId);
+        body.put("text", html);
+        body.put("parse_mode", "HTML");
+        body.put("disable_web_page_preview", true);
+        if (replyMarkup != null) body.put("reply_markup", replyMarkup);
+        try {
+            throttle();
+            JsonNode res = sendHttp.post().uri("/editMessageText")
+                    .contentType(MediaType.APPLICATION_JSON).body(body)
+                    .retrieve().body(JsonNode.class);
+            return res != null && res.path("ok").asBoolean(false);
+        } catch (RestClientException e) {
+            log.warn("editMessageText xatosi (chat={}): {}", chatId, e.getMessage());
+            return false;
+        }
+    }
+
+    /** Inline tugma bosilganiga javob: text bo'lsa foydalanuvchiga qisqa bildirishnoma ko'rsatiladi. */
+    public void answerCallbackQuery(String callbackId, String text, boolean alert) {
+        if (!enabled()) return;
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("callback_query_id", callbackId);
+        if (text != null && !text.isBlank()) {
+            body.put("text", text.length() > 190 ? text.substring(0, 190) + "…" : text);
+            body.put("show_alert", alert);
+        }
+        try {
+            sendHttp.post().uri("/answerCallbackQuery")
+                    .contentType(MediaType.APPLICATION_JSON).body(body)
+                    .retrieve().toBodilessEntity();
+        } catch (RestClientException e) {
+            log.warn("answerCallbackQuery xatosi: {}", e.getMessage());
+        }
+    }
+
     /** Agar oldin webhook o'rnatilgan bo'lsa, long polling ishlashi uchun uni o'chiradi. */
     public void deleteWebhook() {
         try {
@@ -202,6 +242,16 @@ public class TelegramClient {
 
     public static Map<String, Object> removeKeyboard() {
         return Map.of("remove_keyboard", true);
+    }
+
+    /** Xabar tagidagi inline tugmalar. rows — qatorlar, har qatorda button(...) lar. */
+    public static Map<String, Object> inlineKeyboard(Object[][] rows) {
+        return Map.of("inline_keyboard", rows);
+    }
+
+    /** Inline tugma: bosilganda callbackData (64 baytgacha) botga keladi. */
+    public static Map<String, Object> button(String text, String callbackData) {
+        return Map.of("text", text, "callback_data", callbackData);
     }
 
     // ---------- Yordamchi ----------

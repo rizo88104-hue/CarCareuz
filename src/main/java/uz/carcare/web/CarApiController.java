@@ -16,9 +16,11 @@ import java.util.Map;
 public class CarApiController {
 
     private final CarService service;
+    private final CustomerLoginService login;
 
-    public CarApiController(CarService service) {
+    public CarApiController(CarService service, CustomerLoginService login) {
         this.service = service;
+        this.login = login;
     }
 
     @GetMapping("/service-types")
@@ -57,5 +59,17 @@ public class CarApiController {
     @PostMapping("/cars/{token}/test")
     public Map<String, Boolean> test(@PathVariable String token) {
         return Map.of("ok", service.sendTest(token));
+    }
+
+    /** Havolani yangilash: javobda yangi token keladi, eski havola ishlamay qoladi. */
+    @PostMapping("/cars/{token}/rotate")
+    public CarDto rotate(@PathVariable String token) {
+        return service.rotateLink(token);
+    }
+
+    /** Telegram orqali tasdiqlash holati (brauzer har 2 soniyada so'raydi). */
+    @GetMapping("/login/{code}")
+    public LoginStatusDto loginStatus(@PathVariable String code) {
+        return login.poll(code);
     }
 }

@@ -15,8 +15,14 @@ public record TelegramProperties(
 
     /** Mashinani botga ulash uchun havola: https://t.me/bot?start=TOKEN */
     public String deepLink(String carToken) {
+        String base = botUrl();
+        return base == null ? null : base + "?start=" + carToken;
+    }
+
+    /** Botning o'zi: https://t.me/bot (username berilmagan bo'lsa null). */
+    public String botUrl() {
         if (botUsername == null || botUsername.isBlank()) return null;
         String name = botUsername.startsWith("@") ? botUsername.substring(1) : botUsername;
-        return "https://t.me/" + name + "?start=" + carToken;
+        return "https://t.me/" + name;
     }
 }

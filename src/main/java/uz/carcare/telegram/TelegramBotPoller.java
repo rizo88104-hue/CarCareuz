@@ -10,6 +10,7 @@ import uz.carcare.model.Car;
 import uz.carcare.util.RateLimiter;
 import uz.carcare.web.ApiException;
 import uz.carcare.web.CarService;
+import uz.carcare.web.CustomerLoginService;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,6 +39,7 @@ public class TelegramBotPoller {
 
     private final TelegramClient telegram;
     private final CarService cars;
+    private final CustomerLoginService login;
     private final AppProperties app;
 
     private final RateLimiter perUser = new RateLimiter(15, 60_000);
@@ -48,9 +50,10 @@ public class TelegramBotPoller {
     private long offset = 0;
     private boolean initialized = false;
 
-    public TelegramBotPoller(TelegramClient telegram, CarService cars, AppProperties app) {
+    public TelegramBotPoller(TelegramClient telegram, CarService cars, CustomerLoginService login, AppProperties app) {
         this.telegram = telegram;
         this.cars = cars;
+        this.login = login;
         this.app = app;
     }
 
@@ -68,7 +71,8 @@ public class TelegramBotPoller {
             for (JsonNode upd : res.path("result")) {
                 offset = upd.path("update_id").asLong() + 1;
                 try {
-                    handle(upd.path("message"));
+                    if (upd.has("callback_query")) handleCallback(upd.path("callback_query"));
+                    else handle(upd.path("message"));
                 } catch (Exception e) {
                     log.error("Bot xabarini qayta ishlashda xato", e);
                 }
@@ -131,6 +135,49 @@ public class TelegramBotPoller {
             telegram.sendMessage(chatId, cars.loyaltyText(chatId));
         } else {
             telegram.sendMessage(chatId, welcome(name));
+        }
+    }
+
+    /**
+     * Inline tugmalar: kirish so'rovini tasdiqlash / rad etish va rad etgandan keyin havolani yangilash.
+     *   lg:ok:KOD — «Ha, bu men»,  lg:no:KOD — «Yo'q»,  rt:KOD — «Havolani yangilash».
+     */
+    private void handleCallback(JsonNode cq) {
+        String callbackId = cq.path("id").asText("");
+        JsonNode msg = cq.path("message");
+        long chatId = msg.path("chat").path("id").asLong();
+        long messageId = msg.path("message_id").asLong();
+        String data = cq.path("data").asText("");
+        if (chatId == 0 || !"private".equals(msg.path("chat").path("type").asText())) {
+            telegram.answerCallbackQuery(callbackId, null, false);
+            return;
+        }
+        if (!perUser.tryAcquire(String.valueOf(chatId))) {
+            telegram.answerCallbackQuery(callbackId, "⏳ Juda ko'p so'rov. Bir daqiqadan keyin urinib ko'ring.", false);
+            return;
+        }
+        try {
+            if (data.startsWith("lg:ok:")) {
+                String text = login.resolve(data.substring(6), chatId, true);
+                telegram.answerCallbackQuery(callbackId, null, false);
+                telegram.editMessageText(chatId, messageId, text, null);
+            } else if (data.startsWith("lg:no:")) {
+                String code = data.substring(6);
+                String text = login.resolve(code, chatId, false);
+                telegram.answerCallbackQuery(callbackId, null, false);
+                Map<String, Object> keyboard = text.startsWith("🚫")
+                        ? TelegramClient.inlineKeyboard(new Object[][]{{TelegramClient.button("🔄 Havolani yangilash", "rt:" + code)}})
+                        : null;
+                telegram.editMessageText(chatId, messageId, text, keyboard);
+            } else if (data.startsWith("rt:")) {
+                String text = login.rotateFromTelegram(data.substring(3), chatId);
+                telegram.answerCallbackQuery(callbackId, null, false);
+                telegram.editMessageText(chatId, messageId, text, null);
+            } else {
+                telegram.answerCallbackQuery(callbackId, null, false);
+            }
+        } catch (ApiException e) {
+            telegram.answerCallbackQuery(callbackId, "❌ " + e.getMessage(), true);
         }
     }
 

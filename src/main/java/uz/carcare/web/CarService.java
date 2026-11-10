@@ -34,10 +34,13 @@ public class CarService {
     private final TelegramProperties telegram;
     private final AuditService audit;
     private final LoyaltyService loyalty;
+    private final CustomerLoginService login;
 
     public CarService(CarRepository cars, ServiceRecordRepository records, ReminderService reminders,
                       NotificationService notifications, SmsService sms,
-                      AppProperties app, TelegramProperties telegram, AuditService audit, LoyaltyService loyalty) {
+                      AppProperties app, TelegramProperties telegram, AuditService audit, LoyaltyService loyalty,
+                      CustomerLoginService login) {
+        this.login = login;
         this.loyalty = loyalty;
         this.audit = audit;
         this.cars = cars;
@@ -51,7 +54,8 @@ public class CarService {
 
     /**
      * Ro'yxatdan o'tkazish. Agar bu raqam shu telefon bilan oldin ro'yxatdan
-     * o'tgan bo'lsa — mavjud sahifani qaytaradi (qayta kirish).
+     * o'tgan bo'lsa — qayta kirish: mashina Telegramga ulangan bo'lsa, havola egasi botda
+     * tasdiqlagandan keyin beriladi; ulanmagan bo'lsa darhol qaytariladi.
      */
     @Transactional
     public RegisterResponse register(RegisterRequest req) {
@@ -68,7 +72,10 @@ public class CarService {
             }
             // Ism-familiya ATAYLAB o'zgartirilmaydi: raqam va telefonni bilgan begona odam
             // mijozning ismini almashtira olmasligi kerak (ismni avtoservis profildan tuzatadi).
-            return new RegisterResponse(car.getToken(), app.carUrl(car.getToken()), true);
+            if (login.needsConfirmation(car)) {
+                return RegisterResponse.confirm(login.start(car).getCode(), telegram.botUrl());
+            }
+            return RegisterResponse.ready(car.getToken(), app.carUrl(car.getToken()), true);
         }
 
         Car car = new Car();
@@ -79,12 +86,20 @@ public class CarService {
         car.setPlateNumber(plate);
         cars.save(car);
         audit.system(car.getFullName(), "Mijoz", null, "Saytda ro'yxatdan o'tdi: " + prettyPlate(plate));
-        return new RegisterResponse(car.getToken(), app.carUrl(car.getToken()), false);
+        return RegisterResponse.ready(car.getToken(), app.carUrl(car.getToken()), false);
     }
 
     @Transactional(readOnly = true)
     public CarDto get(String token) {
         return toDto(find(token));
+    }
+
+    /** «Havolani yangilash»: yangi maxfiy kalit, eski havola darhol ishlamay qoladi. */
+    @Transactional
+    public CarDto rotateLink(String token) {
+        Car car = find(token);
+        login.newLink(car, "sahifadagi tugma");
+        return toDto(car);
     }
 
     @Transactional
