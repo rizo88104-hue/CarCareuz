@@ -19,6 +19,20 @@ public interface CarRepository extends JpaRepository<Car, Long> {
 
     long countByTelegramChatIdIsNotNull();
 
+    /**
+     * Botda "probegingiz qancha?" deb so'rash uchun: Telegram ulangan, keyingi probegi belgilangan faol
+     * servisi bor, probeg :staleBefore dan beri yangilanmagan va :askedBefore dan beri so'ralmagan mashinalar.
+     */
+    @Query("""
+            select distinct c from Car c
+            where c.telegramChatId is not null
+              and exists (select r from ServiceRecord r where r.car = c and r.active = true and r.nextMileage is not null)
+              and (c.mileageUpdatedAt is null or c.mileageUpdatedAt < :staleBefore)
+              and (c.mileageAskedOn is null or c.mileageAskedOn < :askedBefore)
+            """)
+    List<Car> findNeedingMileagePrompt(@Param("staleBefore") java.time.Instant staleBefore,
+                                       @Param("askedBefore") java.time.LocalDate askedBefore);
+
     /** Tug'ilgan kun tabrigi uchun: tug'ilgan kuni kiritilgan va botga ulangan mijozlar. */
     @Query("select c from Car c where c.birthDate is not null and c.telegramChatId is not null")
     List<Car> findAllWithBirthdayAndTelegram();

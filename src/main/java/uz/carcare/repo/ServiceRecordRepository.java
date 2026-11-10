@@ -64,4 +64,21 @@ public interface ServiceRecordRepository extends JpaRepository<ServiceRecord, Lo
             """)
     List<ServiceRecord> findPendingReminders(@Param("today") LocalDate today,
                                              @Param("weekLimit") LocalDate weekLimit);
+
+    /**
+     * Probeg bo'yicha eslatma kerak bo'lgan yozuvlar: keyingi km ma'lum, mashinaning hozirgi probegi ma'lum va
+     *  - qolgan km <= :km va "yaqinlashdi" eslatmasi ketmagan,
+     *  - yoki probeg yetgan/o'tgan va "yetdi" eslatmasi ketmagan.
+     */
+    @Query("""
+            select r from ServiceRecord r join fetch r.car c left join fetch r.center
+            where r.active = true and r.nextMileage is not null and c.currentMileage is not null and (
+                 ((r.kmSoonSent is null or r.kmSoonSent = false) and c.currentMileage >= r.nextMileage - :km)
+              or ((r.kmDueSent is null or r.kmDueSent = false) and c.currentMileage >= r.nextMileage)
+            )
+            """)
+    List<ServiceRecord> findPendingMileageReminders(@Param("km") int km);
+
+    /** Shu mashinaning keyingi probegi belgilangan faol yozuvlari. */
+    List<ServiceRecord> findAllByCarAndActiveTrueAndNextMileageIsNotNull(Car car);
 }

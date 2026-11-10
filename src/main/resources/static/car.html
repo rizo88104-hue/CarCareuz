@@ -42,6 +42,15 @@
     <div class="card">
       <div class="plate-badge"><span class="reg" id="plateReg"></span><span class="num" id="plateNum"></span></div>
       <div class="owner" id="owner"></div>
+      <!-- Probeg: km bo'yicha eslatmalar shu raqamga qarab ketadi -->
+      <div class="status-row" style="margin-top:10px;border-top:1px solid var(--line)">
+        <div><b>🛣 Probeg</b>
+          <div class="hint" id="kmHint"></div></div>
+        <form id="kmForm" style="display:flex;gap:6px;align-items:center" novalidate>
+          <input id="kmInput" type="number" min="1" inputmode="numeric" placeholder="123456" style="width:120px;padding:8px 10px" aria-label="Hozirgi probeg, km">
+          <button class="btn-sm" type="submit" id="kmSave">Saqlash</button>
+        </form>
+      </div>
     </div>
 
     <!-- Eslatma kanallari -->
@@ -183,6 +192,10 @@
     car = c;
     try { localStorage.setItem('carcare:last', JSON.stringify({ token: c.token, plate: c.plateDisplay })); } catch (e) {}
     document.title = c.plateDisplay + ' — CarCare';
+    $('kmHint').textContent = c.currentMileage != null
+        ? km(c.currentMileage) + (c.mileageUpdatedOn ? ' · ' + fmt(c.mileageUpdatedOn) : '') + '. Probeg bo\'yicha servisga ' + Number(c.reminderKmBefore).toLocaleString('ru-RU') + ' km qolganda eslatamiz.'
+        : 'Kiritilmagan. Hozirgi probegni yozing — keyingi probeg yaqinlashganda eslatamiz. Botga shunchaki raqam yozib ham yangilash mumkin.';
+    if (c.currentMileage != null) $('kmInput').placeholder = String(c.currentMileage);
 
     $('plateReg').textContent = c.plateNumber.slice(0, 2);
     $('plateNum').textContent = c.plateDisplay.slice(2).trim();
@@ -238,12 +251,17 @@
     let cls = 'ok', label = d + ' kun qoldi';
     if (d <= 0) { cls = 'bad'; label = d === 0 ? 'Bugun!' : (-d) + ' kun o\'tdi'; }
     else if (d <= car.reminderDaysBefore) cls = 'warn';
+    // Probeg bo'yicha yaqinroq bo'lsa — belgini u aniqlaydi
+    if (r.kmLeft != null) {
+      if (r.kmLeft <= 0) { cls = 'bad'; label = r.kmLeft === 0 ? 'Probeg yetdi!' : km(-r.kmLeft) + ' o\'tdi'; }
+      else if (r.kmLeft <= car.reminderKmBefore && cls !== 'bad') { cls = 'warn'; label = km(r.kmLeft) + ' qoldi'; }
+    }
     const total = Math.max(1, (parse(r.nextDate) - parse(r.doneDate)) / 864e5);
     const passed = (new Date().setHours(0,0,0,0) - parse(r.doneDate)) / 864e5;
     const pct = Math.min(100, Math.max(0, passed / total * 100));
     const color = cls === 'ok' ? 'var(--ok)' : cls === 'warn' ? 'var(--warn)' : 'var(--bad)';
     const meta = ['Almashtirildi: ' + fmt(r.doneDate) + (r.mileage != null ? ' · ' + km(r.mileage) : '')];
-    if (r.nextMileage != null) meta.push('Keyingisi: ' + km(r.nextMileage) + ' da');
+    if (r.nextMileage != null) meta.push('Keyingisi: ' + km(r.nextMileage) + ' da' + (r.kmLeft != null && r.active ? (r.kmLeft > 0 ? ' (' + km(r.kmLeft) + ' qoldi)' : ' (probeg yetdi)') : ''));
     if (r.note) meta.push(r.note);
     if (r.serviceName) meta.push('📍 ' + r.serviceName);
     return `
@@ -330,6 +348,20 @@
   $('smsToggle').onchange = async (e) => {
     try { render(await api('/settings', { method: 'PATCH', body: JSON.stringify({ smsEnabled: e.target.checked }) })); }
     catch (err) { flash(err.message, 'err'); e.target.checked = !e.target.checked; }
+  };
+
+  // Hozirgi probegni saqlash — km bo'yicha eslatmalar darhol tekshiriladi
+  $('kmForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const v = Number($('kmInput').value);
+    if (!v || v <= 0) return flash('Probegni kiriting (km)', 'err');
+    $('kmSave').disabled = true;
+    try {
+      render(await api('/mileage', { method: 'POST', body: JSON.stringify({ mileage: v }) }));
+      $('kmInput').value = '';
+      flash('Probeg saqlandi ✅');
+    } catch (err) { flash(err.message, 'err'); }
+    $('kmSave').disabled = false;
   };
 
   $('testBtn').onclick = async () => {

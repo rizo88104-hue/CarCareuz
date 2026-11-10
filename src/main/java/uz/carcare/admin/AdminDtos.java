@@ -130,7 +130,9 @@ public final class AdminDtos {
             /** Mijoz shu servisning qora ro'yxatida bo'lsa — sababi, aks holda null. */
             String blacklistReason,
             /** Sadoqat kartasi (dastur yo'q yoki usta uchun null). */
-            uz.carcare.loyalty.LoyaltyDtos.LookupLoyalty loyalty
+            uz.carcare.loyalty.LoyaltyDtos.LookupLoyalty loyalty,
+            /** Mashinaning oxirgi ma'lum probegi, km (kiritilmagan bo'lsa null). */
+            Integer currentMileage
     ) {
     }
 

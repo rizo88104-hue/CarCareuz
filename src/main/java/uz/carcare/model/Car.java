@@ -42,6 +42,24 @@ public class Car {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    // ---------- Probeg (km bo'yicha eslatmalar uchun) ----------
+
+    /** Oxirgi ma'lum probeg, km. Mijoz (sahifa/bot) yoki avtoservis (ish kiritganda) yangilaydi. */
+    private Integer currentMileage;
+
+    /** Probeg qachon yangilangan. */
+    private Instant mileageUpdatedAt;
+
+    /** Botda "probegingiz qancha?" oxirgi marta qachon so'ralgan (30 kunda bir marta). */
+    private java.time.LocalDate mileageAskedOn;
+
+    public Integer getCurrentMileage() { return currentMileage; }
+    public void setCurrentMileage(Integer currentMileage) { this.currentMileage = currentMileage; }
+    public Instant getMileageUpdatedAt() { return mileageUpdatedAt; }
+    public void setMileageUpdatedAt(Instant mileageUpdatedAt) { this.mileageUpdatedAt = mileageUpdatedAt; }
+    public java.time.LocalDate getMileageAskedOn() { return mileageAskedOn; }
+    public void setMileageAskedOn(java.time.LocalDate mileageAskedOn) { this.mileageAskedOn = mileageAskedOn; }
+
     // ---------- Mijoz profili (ixtiyoriy) ----------
 
     public enum Gender { MALE, FEMALE }

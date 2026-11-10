@@ -25,6 +25,10 @@ public final class Dtos {
     public record SettingsRequest(Boolean smsEnabled) {
     }
 
+    /** Mijoz hozirgi probegini kiritadi (km). */
+    public record MileageRequest(@NotNull(message = "Probegni kiriting") @Positive(message = "Probeg musbat bo'lsin") Integer mileage) {
+    }
+
     public record RecordRequest(
             @NotNull(message = "Servis turini tanlang") ServiceType type,
             @Size(max = 80, message = "Nom juda uzun") String customName,
@@ -65,6 +69,8 @@ public final class Dtos {
             long daysLeft,
             Integer mileage,
             Integer nextMileage,
+            /** Keyingi probeggacha qolgan km (manfiy — o'tib ketgan; probeg noma'lum bo'lsa null). */
+            Integer kmLeft,
             String note,
             boolean active,
             /** Yozuvni kiritgan avtoservis nomi (mijozning o'zi kiritgan bo'lsa null). Bunday yozuvni mijoz o'chira olmaydi. */
@@ -84,6 +90,10 @@ public final class Dtos {
             boolean smsEnabled,
             boolean smsAvailable,
             int reminderDaysBefore,
+            int reminderKmBefore,
+            /** Hozirgi probeg va qachon yangilangani (kiritilmagan bo'lsa null). */
+            Integer currentMileage,
+            LocalDate mileageUpdatedOn,
             List<RecordDto> records,
             /** Servislardagi jamg'arma kartalari (sadoqat dasturi). */
             List<uz.carcare.loyalty.LoyaltyDtos.PublicCard> loyalty

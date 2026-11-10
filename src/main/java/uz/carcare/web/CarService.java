@@ -10,6 +10,7 @@ import uz.carcare.loyalty.LoyaltyService;
 import uz.carcare.model.Car;
 import uz.carcare.model.ServiceRecord;
 import uz.carcare.model.ServiceType;
+import uz.carcare.reminder.MileageService;
 import uz.carcare.reminder.NotificationService;
 import uz.carcare.reminder.ReminderService;
 import uz.carcare.repo.CarRepository;
@@ -35,11 +36,13 @@ public class CarService {
     private final AuditService audit;
     private final LoyaltyService loyalty;
     private final CustomerLoginService login;
+    private final MileageService mileageService;
 
     public CarService(CarRepository cars, ServiceRecordRepository records, ReminderService reminders,
                       NotificationService notifications, SmsService sms,
                       AppProperties app, TelegramProperties telegram, AuditService audit, LoyaltyService loyalty,
-                      CustomerLoginService login) {
+                      CustomerLoginService login, MileageService mileageService) {
+        this.mileageService = mileageService;
         this.login = login;
         this.loyalty = loyalty;
         this.audit = audit;
@@ -140,7 +143,17 @@ public class CarService {
         r.setNote(trim(req.note()));
         records.save(r);
 
+        // Ish paytidagi probeg mashinaning hozirgi probegidan katta bo'lsa — yangilaymiz (km eslatmalari uchun)
+        if (req.mileage() != null) mileageService.apply(car, req.mileage(), "sahifada servis qo'shilganda", false);
         reminders.checkNow(r); // muddat yaqin bo'lsa darhol eslatadi
+        return toDto(car);
+    }
+
+    /** Mijoz sahifada hozirgi probegini kiritdi. */
+    @Transactional
+    public CarDto updateMileage(String token, MileageRequest req) {
+        Car car = find(token);
+        mileageService.apply(car, req.mileage(), "mashina sahifasi", true);
         return toDto(car);
     }
 
@@ -210,7 +223,9 @@ public class CarService {
         LocalDate today = LocalDate.now(app.zoneId());
         StringBuilder sb = new StringBuilder();
         for (Car car : list) {
-            sb.append("🚗 <b>").append(html(prettyPlate(car.getPlateNumber()))).append("</b>\n");
+            sb.append("🚗 <b>").append(html(prettyPlate(car.getPlateNumber()))).append("</b>");
+            if (car.getCurrentMileage() != null) sb.append(" · 🛣 ").append(MileageService.km(car.getCurrentMileage()));
+            sb.append("\n");
             List<ServiceRecord> active = records.findAllByCarAndActiveTrueOrderByNextDateAsc(car);
             if (active.isEmpty()) {
                 sb.append("   Hali servis yozuvi yo'q\n");
@@ -218,9 +233,16 @@ public class CarService {
             for (ServiceRecord r : active) {
                 long d = ChronoUnit.DAYS.between(today, r.getNextDate());
                 String left = d > 0 ? d + " kun qoldi" : d == 0 ? "bugun!" : (-d) + " kun o'tdi!";
-                String icon = d <= 0 ? "🔴" : d <= app.reminderDaysBefore() ? "🟡" : "🟢";
+                Integer kmLeft = r.kmLeft();
+                boolean kmDue = kmLeft != null && kmLeft <= 0, kmSoon = kmLeft != null && kmLeft <= app.reminderKmBefore();
+                String icon = d <= 0 || kmDue ? "🔴" : d <= app.reminderDaysBefore() || kmSoon ? "🟡" : "🟢";
                 sb.append("   ").append(icon).append(" ").append(html(r.displayName()))
-                        .append(" — ").append(date(r.getNextDate())).append(" (").append(left).append(")\n");
+                        .append(" — ").append(date(r.getNextDate())).append(" (").append(left).append(")");
+                if (r.getNextMileage() != null) {
+                    sb.append(", ").append(MileageService.km(r.getNextMileage())).append(" da");
+                    if (kmLeft != null) sb.append(kmLeft <= 0 ? " (probeg yetdi!)" : " (" + MileageService.km(kmLeft) + " qoldi)");
+                }
+                sb.append("\n");
             }
             sb.append("   ").append(app.carUrl(car.getToken())).append("\n\n");
         }
@@ -251,13 +273,16 @@ public class CarService {
                         r.getId(), r.getType(), r.displayName(),
                         r.getDoneDate(), r.getNextDate(),
                         ChronoUnit.DAYS.between(today, r.getNextDate()),
-                        r.getMileage(), r.getNextMileage(), r.getNote(), r.isActive(),
+                        r.getMileage(), r.getNextMileage(), r.kmLeft(), r.getNote(), r.isActive(),
                         r.getCenter() == null ? null : r.getCenter().getName()))
                 .toList();
         return new CarDto(
                 car.getToken(), car.getFirstName(), car.getLastName(),
                 prettyPhone(car.getPhone()), car.getPlateNumber(), prettyPlate(car.getPlateNumber()),
                 car.getTelegramChatId() != null, telegram.deepLink(car.getToken()),
-                car.isSmsEnabled(), sms.enabled(), app.reminderDaysBefore(), list, loyalty.publicCards(car));
+                car.isSmsEnabled(), sms.enabled(), app.reminderDaysBefore(), app.reminderKmBefore(),
+                car.getCurrentMileage(),
+                car.getMileageUpdatedAt() == null ? null : LocalDate.ofInstant(car.getMileageUpdatedAt(), app.zoneId()),
+                list, loyalty.publicCards(car));
     }
 }

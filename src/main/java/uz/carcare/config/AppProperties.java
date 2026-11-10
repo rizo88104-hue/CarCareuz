@@ -10,7 +10,9 @@ import java.time.ZoneId;
 public record AppProperties(
         @DefaultValue("http://localhost:8080") String baseUrl,
         @DefaultValue("Asia/Tashkent") String zone,
-        @DefaultValue("7") int reminderDaysBefore
+        @DefaultValue("7") int reminderDaysBefore,
+        /** Keyingi probegga shuncha km qolganda eslatish. */
+        @DefaultValue("500") int reminderKmBefore
 ) {
     public ZoneId zoneId() {
         return ZoneId.of(zone);

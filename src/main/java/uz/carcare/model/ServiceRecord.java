@@ -60,6 +60,24 @@ public class ServiceRecord {
     @Column(nullable = false)
     private boolean dueReminderSent = false;
 
+    /**
+     * Probeg bo'yicha eslatmalar: "N km qoldi" va "probeg yetdi".
+     * Boolean (null = false) — eski yozuvlar bor jadvalga NOT NULL ustun qo'shib bo'lmaydi.
+     */
+    private Boolean kmSoonSent;
+    private Boolean kmDueSent;
+
+    public boolean isKmSoonSent() { return Boolean.TRUE.equals(kmSoonSent); }
+    public void setKmSoonSent(boolean v) { this.kmSoonSent = v; }
+    public boolean isKmDueSent() { return Boolean.TRUE.equals(kmDueSent); }
+    public void setKmDueSent(boolean v) { this.kmDueSent = v; }
+
+    /** Keyingi probeggacha qolgan km (probeg yoki keyingi km kiritilmagan bo'lsa null). Manfiy — o'tib ketgan. */
+    public Integer kmLeft() {
+        Integer cur = car == null ? null : car.getCurrentMileage();
+        return nextMileage == null || cur == null ? null : nextMileage - cur;
+    }
+
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 

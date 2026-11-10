@@ -695,7 +695,7 @@
   const addMonths = (m) => { const b = $('rDone').value ? parse($('rDone').value) : new Date(); b.setMonth(b.getMonth() + m); return iso(b); };
 
   function itemVal(code) {
-    if (!itemVals[code]) itemVals[code] = { next: addMonths(DEFAULT_MONTHS[code] || 6), price: '', name: '', touched: false };
+    if (!itemVals[code]) itemVals[code] = { next: addMonths(DEFAULT_MONTHS[code] || 6), nextKm: '', price: '', name: '', touched: false };
     return itemVals[code];
   }
   function renderTypes() {
@@ -711,6 +711,8 @@
         (code === 'OTHER' ? '<div class="field"><label for="it-name-' + id + '">Nima qilindi (nomi)</label><input id="it-name-' + id + '" data-f="name" maxlength="80" value="' + esc(v.name) + '" placeholder="Masalan: Generator remonti"></div>' : '') +
         '<div class="row"><div class="field"><label for="it-next-' + id + '">Keyingi almashtirish</label><input id="it-next-' + id + '" data-f="next" type="date" value="' + esc(v.next) + '">' +
         '<div class="chips"><span class="chip" data-m="3">+3 oy</span><span class="chip" data-m="6">+6 oy</span><span class="chip" data-m="12">+1 yil</span></div></div>' +
+        '<div class="field"><label for="it-km-' + id + '">Keyingi probeg, km</label><input id="it-km-' + id + '" data-f="nextKm" type="number" min="0" inputmode="numeric" placeholder="ixtiyoriy" value="' + esc(v.nextKm) + '">' +
+        '<div class="chips"><span class="chip" data-km="5000">+5 000</span><span class="chip" data-km="10000">+10 000</span><span class="chip" data-km="15000">+15 000</span></div></div>' +
         (master ? '' : '<div class="field"><label for="it-price-' + id + '">Narxi, so\'m</label><input id="it-price-' + id + '" data-f="price" inputmode="numeric" autocomplete="off" placeholder="masalan 250 000" value="' + esc(v.price) + '"></div>') +
         '</div></div>';
     }).join('') || '<div class="hint">Yuqoridan bajarilgan ishni tanlang.</div>';
@@ -731,6 +733,16 @@
   $('rItems').addEventListener('click', (e) => {
     const rm = e.target.closest('[data-rm]');
     if (rm) { selTypes = selTypes.filter(x => x !== rm.dataset.rm); renderTypes(); return; }
+    // "+10 000" — hozirgi probeg (rKm) ustiga qo'shib keyingi probegni to'ldiradi
+    const kch = e.target.closest('.chip[data-km]');
+    if (kch) {
+      const box = kch.closest('[data-item]'), v = itemVal(box.dataset.item);
+      const base = Number($('rKm').value) || 0;
+      if (!base) { $('rKm').focus(); $('saveResult').innerHTML = '<div class="result warn">Avval hozirgi probegni («Probeg, km») kiriting.</div>'; return; }
+      v.nextKm = String(base + Number(kch.dataset.km));
+      box.querySelector('[data-f="nextKm"]').value = v.nextKm;
+      return;
+    }
     const ch = e.target.closest('.chip[data-m]'); if (!ch) return;
     const box = ch.closest('[data-item]'), v = itemVal(box.dataset.item);
     v.next = addMonths(Number(ch.dataset.m)); v.touched = true;
@@ -763,7 +775,9 @@
       lookupLoy = c.loyalty || null;
       renderLoyWork();
       if (c.exists) {
+        if (c.currentMileage != null && !$('rKm').value) $('rKm').placeholder = 'oxirgi: ' + Number(c.currentMileage).toLocaleString('ru-RU') + ' km';
         $('ownerBox').innerHTML = '<div class="ownerbox"><b>' + esc(c.firstName + ' ' + c.lastName) + '</b>' + (c.phoneDisplay ? ' · ' + esc(c.phoneDisplay) : '') + ' ' + tgBadge(c.telegramConnected) +
+          (c.currentMileage != null ? '<span class="small" style="margin-left:8px">🛣 ' + Number(c.currentMileage).toLocaleString('ru-RU') + ' km</span>' : '') +
           (c.activeServices.length ? '<div class="small" style="margin-top:6px">Hozirgi servislar: ' + c.activeServices.map(esc).join('; ') + '</div>' : '') + '</div>' +
           (c.blacklistReason ? '<div class="msg show err" style="margin-top:8px">⛔ <b>Qora ro\'yxatda:</b> ' + esc(c.blacklistReason) + '</div>' : '');
         show('ownerBox', true); show('newOwner', false);
@@ -777,7 +791,8 @@
     const master = me.role === 'MASTER';
     if (!selTypes.length) { $('saveResult').innerHTML = '<div class="result warn">Nima qilinganini tanlang — kamida bitta ish.</div>'; return; }
     const items = selTypes.map(c => { const v = itemVal(c); return {
-      type: c, customName: c === 'OTHER' ? (v.name.trim() || null) : null, nextDate: v.next || null, nextMileage: null,
+      type: c, customName: c === 'OTHER' ? (v.name.trim() || null) : null, nextDate: v.next || null,
+      nextMileage: Number(v.nextKm) > 0 ? Number(v.nextKm) : null,
       price: master ? null : (num(v.price) || null) }; });
     const body = {
       plateNumber: $('rPlate').value,

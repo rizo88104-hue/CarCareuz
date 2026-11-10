@@ -88,9 +88,18 @@ ichida *Environment variables* ga yuqoridagi ikki o'zgaruvchini qo'shing.
    - muddat kuni (yoki o'tib ketgan) → "Bugun almashtirish kuni" (bir marta).
    Yangi yozuv qo'shilganda ham darhol tekshiriladi. Xabar yetkazilmasa
    (masalan bot hali ulanmagan), ertasi kuni yana urinadi.
-5. Botdagi `/holat` buyrug'i — barcha mashinalar va servislar ro'yxati (🟢🟡🔴).
+5. **Probeg (km) bo'yicha eslatma.** Yozuvda «Keyingi probeg» bo'lsa, mashinaning hozirgi probegi
+   bilan solishtiriladi: `REMINDER_KM` (500) km qolganda → "N km qoldi", yetganda → "Probeg yetdi"
+   (har biri bir marta). Hozirgi probeg uchta joydan yangilanadi va yangilangan zahoti tekshiriladi:
+   - **mijoz botga raqam yozadi** (`123456` yoki `/probeg 123456`; bir nechta mashina bo'lsa
+     `01A123BC 123456`);
+   - **mijoz sahifada** «🛣 Probeg» qatoriga kiritadi;
+   - **usta ish kiritganda** «Probeg, km» yozadi (keyingi probeg uchun +5 000 / +10 000 / +15 000 tugmalari).
+   Probeg kamayishi qabul qilinmaydi (xato kiritishdan himoya). Probegi 30 kundan beri yangilanmagan va
+   km bo'yicha servisi bor mijozlardan bot o'zi 30 kunda bir marta «Probegingiz qancha?» deb so'raydi.
+6. Botdagi `/holat` buyrug'i — barcha mashinalar, servislar va probeg holati (🟢🟡🔴).
 
-Necha kun oldin eslatishni o'zgartirish: `REMINDER_DAYS=7`.
+Necha kun oldin eslatishni o'zgartirish: `REMINDER_DAYS=7`. Necha km oldin: `REMINDER_KM=500`.
 Tekshirish vaqti: `application.properties` dagi `app.reminder-cron`.
 
 ## Admin panel: `/admin`
@@ -357,6 +366,7 @@ tushiring — ikkita nusxa bir botdan xabar olishga urinib, bir-biriga xalaqit b
 | POST | `/api/cars/{token}/records` | Servis qo'shish |
 | DELETE | `/api/cars/{token}/records/{id}` | Servis o'chirish |
 | POST | `/api/cars/{token}/test` | Sinov xabari |
+| POST | `/api/cars/{token}/mileage` | `{ "mileage": 123456 }` — hozirgi probeg; km eslatmalari darhol tekshiriladi |
 | POST | `/api/cars/{token}/rotate` | Havolani yangilash (yangi token qaytadi, eskisi o'chadi) |
 | GET | `/api/login/{code}` | Telegram orqali tasdiqlash holati: `pending / approved / denied / expired` |
 | POST | `/api/admin/login` | Xodim kirishi. Super admin 2FA yoqilgan bo'lsa `{ twoFactor: true, challenge }` qaytadi |

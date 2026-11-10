@@ -61,6 +61,12 @@ public class CarApiController {
         return Map.of("ok", service.sendTest(token));
     }
 
+    /** Hozirgi probegni kiritish: km bo'yicha eslatmalar darhol tekshiriladi. */
+    @PostMapping("/cars/{token}/mileage")
+    public CarDto mileage(@PathVariable String token, @Valid @RequestBody MileageRequest req) {
+        return service.updateMileage(token, req);
+    }
+
     /** Havolani yangilash: javobda yangi token keladi, eski havola ishlamay qoladi. */
     @PostMapping("/cars/{token}/rotate")
     public CarDto rotate(@PathVariable String token) {

@@ -7,6 +7,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import uz.carcare.admin.AdminTwoFactorService;
 import uz.carcare.config.AppProperties;
+import uz.carcare.reminder.MileageService;
 import uz.carcare.model.Car;
 import uz.carcare.util.RateLimiter;
 import uz.carcare.web.ApiException;
@@ -42,6 +43,7 @@ public class TelegramBotPoller {
     private final CarService cars;
     private final CustomerLoginService login;
     private final AdminTwoFactorService adminTwoFactor;
+    private final MileageService mileage;
     private final AppProperties app;
 
     private final RateLimiter perUser = new RateLimiter(15, 60_000);
@@ -53,11 +55,12 @@ public class TelegramBotPoller {
     private boolean initialized = false;
 
     public TelegramBotPoller(TelegramClient telegram, CarService cars, CustomerLoginService login,
-                             AdminTwoFactorService adminTwoFactor, AppProperties app) {
+                             AdminTwoFactorService adminTwoFactor, MileageService mileage, AppProperties app) {
         this.telegram = telegram;
         this.cars = cars;
         this.login = login;
         this.adminTwoFactor = adminTwoFactor;
+        this.mileage = mileage;
         this.app = app;
     }
 
@@ -142,6 +145,9 @@ public class TelegramBotPoller {
             telegram.sendMessage(chatId, cars.statusText(chatId));
         } else if (text.startsWith("/ball") || text.startsWith("/bonus") || text.startsWith("/karta")) {
             telegram.sendMessage(chatId, cars.loyaltyText(chatId));
+        } else if (text.startsWith("/probeg") || text.startsWith("/km") || MileageService.parseKm(text) != null) {
+            // "/probeg 123456", faqat "123456" yoki "01A123BC 123456" — probegni yangilash
+            telegram.sendMessage(chatId, mileage.fromTelegram(chatId, text));
         } else {
             telegram.sendMessage(chatId, welcome(name));
         }
@@ -224,7 +230,8 @@ public class TelegramBotPoller {
                 + "Men mashinangiz servislari (moy, filtrlar, sug'urta va h.k.) muddatini eslatib turaman.\n\n"
                 + "1️⃣ Saytda ro'yxatdan o'ting: " + app.baseUrl() + "\n"
                 + "2️⃣ Mashina sahifasida <b>\"Telegramga ulash\"</b> tugmasini bosing\n\n"
-                + "Buyruqlar:\n/holat — mashinalarim va yaqin servislar\n/ball — jamg'arma kartalarim va bonus ballarim";
+                + "Buyruqlar:\n/holat — mashinalarim va yaqin servislar\n/ball — jamg'arma kartalarim va bonus ballarim\n"
+                + "/probeg 123456 — probegni yangilash (yoki shunchaki raqam yozing); km bo'yicha servis yaqinlashsa eslataman";
     }
 
     private static void sleepQuietly(long ms) {

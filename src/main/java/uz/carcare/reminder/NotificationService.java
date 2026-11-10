@@ -17,6 +17,11 @@ public class NotificationService {
         this.sms = sms;
     }
 
+    /** Faqat Telegram (SMS pullik — so'rov-xabarlar uchun ishlatilmaydi). */
+    public boolean telegram(Car car, String html) {
+        return car.getTelegramChatId() != null && telegram.sendMessage(car.getTelegramChatId(), html);
+    }
+
     /** @return kamida bitta kanal orqali yetkazilgan bo'lsa true */
     public boolean notify(Car car, String telegramHtml, String smsText) {
         boolean delivered = false;

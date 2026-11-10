@@ -9,6 +9,7 @@ import uz.carcare.config.AppProperties;
 import uz.carcare.loyalty.LoyaltyService;
 import uz.carcare.model.*;
 import uz.carcare.model.StaffUser.Role;
+import uz.carcare.reminder.MileageService;
 import uz.carcare.reminder.ReminderService;
 import uz.carcare.repo.*;
 import uz.carcare.telegram.TelegramClient;
@@ -41,6 +42,7 @@ public class AdminService {
     private final AdminAuthService auth;
     private final AuditService audit;
     private final ReminderService reminders;
+    private final MileageService mileage;
     private final TelegramClient telegram;
     private final AppProperties app;
     private final LoyaltyService loyalty;
@@ -48,8 +50,9 @@ public class AdminService {
     public AdminService(CarRepository cars, ServiceRecordRepository records, ServiceCenterRepository centers,
                         StaffUserRepository staff, AdminSessionRepository sessions, ActivityLogRepository logs,
                         PaymentRepository payments, CustomerNoteRepository customerNotes,
-                        AdminAuthService auth, AuditService audit, ReminderService reminders,
+                        AdminAuthService auth, AuditService audit, ReminderService reminders, MileageService mileage,
                         TelegramClient telegram, AppProperties app, LoyaltyService loyalty) {
+        this.mileage = mileage;
         this.loyalty = loyalty;
         this.payments = payments;
         this.customerNotes = customerNotes;
@@ -80,12 +83,14 @@ public class AdminService {
                         showPhone ? car.getPhone() : null, showPhone ? prettyPhone(car.getPhone()) : null,
                         car.getTelegramChatId() != null,
                         records.findAllByCarAndActiveTrueOrderByNextDateAsc(car).stream()
-                                .map(r -> r.displayName() + " — " + date(r.getNextDate())).toList(),
+                                .map(r -> r.displayName() + " — " + date(r.getNextDate())
+                                        + (r.getNextMileage() == null ? "" : " / " + MileageService.km(r.getNextMileage()))).toList(),
                         customerNotes.findByCenterAndCar(center, car)
                                 .filter(CustomerNote::isBlacklisted).map(CustomerNote::getBlacklistReason).orElse(null),
-                        showPhone ? loyalty.lookup(center, car) : null))
+                        showPhone ? loyalty.lookup(center, car) : null,
+                        car.getCurrentMileage()))
                 .orElseGet(() -> new CarLookupDto(false, plate, prettyPlate(plate), null, null, null, null, false, List.of(), null,
-                        showPhone ? loyalty.lookup(center, null) : null));
+                        showPhone ? loyalty.lookup(center, null) : null, null));
     }
 
     @Transactional
@@ -257,6 +262,8 @@ public class AdminService {
                 debt += r.getRemaining();
             }
         }
+        // Usta kiritgan probeg mashinaning hozirgi probegi bo'ladi (kamroq bo'lsa e'tiborsiz) — km eslatmalari uchun
+        if (req.mileage() != null) mileage.apply(car, req.mileage(), "avtoservis «" + center.getName() + "»", false);
         for (ServiceRecord r : saved) reminders.checkNow(r);
 
         String names = saved.stream().map(ServiceRecord::displayName).collect(java.util.stream.Collectors.joining(", "));
