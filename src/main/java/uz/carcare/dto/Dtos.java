@@ -14,29 +14,32 @@ public final class Dtos {
 
     // ---------- So'rovlar ----------
 
+    /** Validatsiya xabarlari — {v.kalit} ko'rinishida; GlobalExceptionHandler ularni joriy tilga tarjima qiladi. */
     public record RegisterRequest(
-            @NotBlank(message = "Ismni kiriting") @Size(max = 60, message = "Ism juda uzun") String firstName,
-            @NotBlank(message = "Familiyani kiriting") @Size(max = 60, message = "Familiya juda uzun") String lastName,
-            @NotBlank(message = "Telefon raqamni kiriting") String phone,
-            @NotBlank(message = "Mashina raqamini kiriting") String plateNumber
+            @NotBlank(message = "{v.firstName}") @Size(max = 60, message = "{v.firstNameLong}") String firstName,
+            @NotBlank(message = "{v.lastName}") @Size(max = 60, message = "{v.lastNameLong}") String lastName,
+            @NotBlank(message = "{v.phone}") String phone,
+            @NotBlank(message = "{v.plate}") String plateNumber,
+            /** Saytda tanlangan til: "uz" yoki "ru" (ixtiyoriy). */
+            String lang
     ) {
     }
 
-    public record SettingsRequest(Boolean smsEnabled) {
+    public record SettingsRequest(Boolean smsEnabled, String lang) {
     }
 
     /** Mijoz hozirgi probegini kiritadi (km). */
-    public record MileageRequest(@NotNull(message = "Probegni kiriting") @Positive(message = "Probeg musbat bo'lsin") Integer mileage) {
+    public record MileageRequest(@NotNull(message = "{v.mileage}") @Positive(message = "{v.mileagePositive}") Integer mileage) {
     }
 
     public record RecordRequest(
-            @NotNull(message = "Servis turini tanlang") ServiceType type,
-            @Size(max = 80, message = "Nom juda uzun") String customName,
-            @NotNull(message = "Almashtirilgan sanani kiriting") LocalDate doneDate,
-            @NotNull(message = "Keyingi almashtirish sanasini kiriting") LocalDate nextDate,
-            @PositiveOrZero(message = "Probeg manfiy bo'lmasin") Integer mileage,
-            @PositiveOrZero(message = "Probeg manfiy bo'lmasin") Integer nextMileage,
-            @Size(max = 300, message = "Izoh juda uzun") String note
+            @NotNull(message = "{v.type}") ServiceType type,
+            @Size(max = 80, message = "{v.nameLong}") String customName,
+            @NotNull(message = "{v.doneDate}") LocalDate doneDate,
+            @NotNull(message = "{v.nextDate}") LocalDate nextDate,
+            @PositiveOrZero(message = "{v.mileageNeg}") Integer mileage,
+            @PositiveOrZero(message = "{v.mileageNeg}") Integer nextMileage,
+            @Size(max = 300, message = "{v.noteLong}") String note
     ) {
     }
 

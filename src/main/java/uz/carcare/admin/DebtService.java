@@ -6,6 +6,8 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.carcare.admin.AdminDtos.PaymentDto;
 import uz.carcare.admin.AdminDtos.PaymentRequest;
 import uz.carcare.admin.DebtDtos.*;
+import uz.carcare.i18n.I18n;
+import uz.carcare.i18n.LangContext;
 import uz.carcare.config.AppProperties;
 import uz.carcare.loyalty.LoyaltyService;
 import uz.carcare.model.*;
@@ -101,9 +103,9 @@ public class DebtService {
         ServiceCenter center = center(p);
         ServiceRecord r = record(center, recordId);
         long remaining = r.getRemaining();
-        if (r.getPrice() == null) throw ApiException.badRequest("Bu ishga hali narx qo'yilmagan");
-        if (remaining <= 0) throw ApiException.badRequest("Bu ish uchun qarz yo'q");
-        if (req.amount() > remaining) throw ApiException.badRequest("Summa qarz qoldig'idan (" + money(remaining) + ") oshmasin");
+        if (r.getPrice() == null) throw ApiException.badRequest(I18n.t("err.debt.noPrice"));
+        if (remaining <= 0) throw ApiException.badRequest(I18n.t("err.debt.noneForJob"));
+        if (req.amount() > remaining) throw ApiException.badRequest(I18n.t("err.debt.overRemaining", money(remaining)));
 
         Payment.Method method = req.method() == null ? Payment.Method.CASH : req.method();
         LoyaltyService.Earn earn = null;
@@ -118,16 +120,17 @@ public class DebtService {
         Car car = r.getCar();
         String plate = prettyPlate(car.getPlateNumber());
         audit.staff(p, center, plate + " — " + r.displayName() + ": " + money(req.amount()) + " to'lov qabul qildi ("
-                + method.label().toLowerCase() + ")" + (r.getRemaining() == 0 ? ", qarz to'liq yopildi" : ", qoldiq " + money(r.getRemaining())));
+                + method.labelUz().toLowerCase() + ")" + (r.getRemaining() == 0 ? ", qarz to'liq yopildi" : ", qoldiq " + money(r.getRemaining())));
 
         if (car.getTelegramChatId() != null) {
-            telegram.sendLater(car.getTelegramChatId(),
-                    "🧾 <b>To'lov qabul qilindi</b>\n\n"
+            final LoyaltyService.Earn fEarn = earn;
+            telegram.sendLater(car.getTelegramChatId(), LangContext.with(car.lang(), () ->
+                    I18n.t("bot.payReceipt.title") + "\n\n"
                             + "🚗 <b>" + html(plate) + "</b> · " + html(r.displayName()) + "\n"
-                            + "💵 To'landi: <b>" + money(req.amount()) + "</b> (" + method.label().toLowerCase() + ")\n"
-                            + (r.getRemaining() == 0 ? "✅ Qarz to'liq yopildi. Rahmat!" : "📌 Qoldiq: <b>" + money(r.getRemaining()) + "</b>, muddat " + date(r.getPayDueDate()))
-                            + LoyaltyService.receiptLine(earn)
-                            + "\n\n📍 " + html(center.getName()));
+                            + I18n.t("bot.payReceipt.paid", money(req.amount()), method.label().toLowerCase()) + "\n"
+                            + (r.getRemaining() == 0 ? I18n.t("bot.payReceipt.closed") : I18n.t("bot.payReceipt.restDue", money(r.getRemaining()), date(r.getPayDueDate())))
+                            + LoyaltyService.receiptLine(fEarn)
+                            + "\n\n📍 " + html(center.getName())));
         }
         return row(r, today());
     }
@@ -148,14 +151,14 @@ public class DebtService {
         long discount = LoyaltyService.percent(req.price(), pct);
         long finalPrice = req.price() - discount;
         if (finalPrice < r.getPaid()) {
-            throw ApiException.badRequest("Narx allaqachon to'langan summadan (" + money(r.getPaid()) + ") kam bo'lishi mumkin emas");
+            throw ApiException.badRequest(I18n.t("err.price.belowPaid", money(r.getPaid())));
         }
         Long old = r.getPrice();
         r.setPrice(finalPrice);
         r.setDiscount(discount);
         if (r.getRemaining() > 0) {
             LocalDate due = req.payDueDate() != null ? req.payDueDate() : r.getPayDueDate();
-            if (due == null) throw ApiException.badRequest("Qarz qolyapti — to'lash muddatini kiriting");
+            if (due == null) throw ApiException.badRequest(I18n.t("err.pay.dueMissing"));
             r.setPayDueDate(due);
             r.setCredit(true);
         }
@@ -218,13 +221,13 @@ public class DebtService {
     }
 
     private ServiceRecord record(ServiceCenter center, Long id) {
-        return records.findByIdAndCenter(id, center).orElseThrow(() -> ApiException.notFound("Ish topilmadi"));
+        return records.findByIdAndCenter(id, center).orElseThrow(() -> ApiException.notFound(I18n.t("err.job.notFound")));
     }
 
     private ServiceCenter center(AdminPrincipal p) {
         ServiceCenter c = centers.findById(p.centerId())
-                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "Servis topilmadi"));
-        if (!c.isActive()) throw new ApiException(HttpStatus.FORBIDDEN, "Bu avtoservis o'chirilgan");
+                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, I18n.t("err.center.notFound")));
+        if (!c.isActive()) throw new ApiException(HttpStatus.FORBIDDEN, I18n.t("err.center.disabled"));
         return c;
     }
 

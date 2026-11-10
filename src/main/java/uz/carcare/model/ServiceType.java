@@ -23,7 +23,12 @@ public enum ServiceType {
         this.label = label;
     }
 
+    /** Joriy tilda (LangContext): o'zbek yoki rus. */
     public String getLabel() {
+        return uz.carcare.i18n.I18n.t("type." + name());
+    }
+
+    public String getLabelUz() {
         return label;
     }
 }

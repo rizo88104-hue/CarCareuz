@@ -26,7 +26,12 @@ public class Payment {
             this.label = label;
         }
 
+        /** Joriy tilda (LangContext). */
         public String label() {
+            return uz.carcare.i18n.I18n.t("method." + name());
+        }
+
+        public String labelUz() {
             return label;
         }
 

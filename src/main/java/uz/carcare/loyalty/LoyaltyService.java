@@ -7,6 +7,8 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.carcare.admin.AdminPrincipal;
 import uz.carcare.admin.AuditService;
 import uz.carcare.config.AppProperties;
+import uz.carcare.i18n.I18n;
+import uz.carcare.i18n.LangContext;
 import uz.carcare.loyalty.LoyaltyDtos.*;
 import uz.carcare.model.*;
 import uz.carcare.repo.*;
@@ -129,13 +131,12 @@ public class LoyaltyService {
     public void redeem(ServiceCenter center, ServiceRecord r, long amount, String actor, String note) {
         if (amount <= 0) return;
         LoyaltyProgram prog = activeProgram(center);
-        if (prog == null) throw ApiException.badRequest("Sadoqat dasturi yoqilmagan — ball bilan to'lab bo'lmaydi");
+        if (prog == null) throw ApiException.badRequest(I18n.t("err.loy.disabled"));
         LoyaltyAccount acc = account(center, r.getCar())
-                .orElseThrow(() -> ApiException.badRequest("Mijozda jamg'arma karta yo'q"));
+                .orElseThrow(() -> ApiException.badRequest(I18n.t("err.loy.noCard")));
         long cap = redeemCap(prog, acc, r);
         if (amount > cap) {
-            throw ApiException.badRequest("Ball bilan ko'pi bilan " + money(cap) + " to'lash mumkin (balans "
-                    + points(acc.getBalance()) + ", ish narxining " + prog.getMaxRedeemPct() + "% gacha)");
+            throw ApiException.badRequest(I18n.t("err.loy.redeemCap", money(cap), points(acc.getBalance()), prog.getMaxRedeemPct()));
         }
         acc.change(-amount);
         acc.addRedeemed(amount);
@@ -179,7 +180,7 @@ public class LoyaltyService {
     /** Kvitansiyadagi qator: keshbek va balans. */
     public static String receiptLine(Earn e) {
         if (e == null || e.points() <= 0) return "";
-        return "\n🎁 Keshbek: <b>+" + points(e.points()) + "</b> (" + e.cashbackPct() + "%), balans: " + points(e.balance());
+        return "\n" + I18n.t("bot.receipt.cashback", points(e.points()), e.cashbackPct(), points(e.balance()));
     }
 
     /** Ish formasi uchun qisqa ma'lumot. Usta uchun chaqirilmaydi. */
@@ -217,27 +218,27 @@ public class LoyaltyService {
         ServiceCenter center = center(p);
         Map<LoyaltyLevel, LevelInput> byLevel = new EnumMap<>(LoyaltyLevel.class);
         for (LevelInput l : req.levels()) {
-            if (byLevel.put(l.level(), l) != null) throw ApiException.badRequest("Daraja ikki marta ko'rsatilgan: " + l.level().label());
+            if (byLevel.put(l.level(), l) != null) throw ApiException.badRequest(I18n.t("err.loy.levelTwice", l.level().label()));
         }
-        if (byLevel.size() != LoyaltyLevel.values().length) throw ApiException.badRequest("Barcha 4 ta darajani kiriting");
+        if (byLevel.size() != LoyaltyLevel.values().length) throw ApiException.badRequest(I18n.t("err.loy.allLevels"));
         long prevFrom = 0;
         int prevCash = -1, prevDisc = -1;
         for (LoyaltyLevel l : LoyaltyLevel.values()) {
             LevelInput in = byLevel.get(l);
             long from = l == LoyaltyLevel.BRONZE ? 0 : in.from();
             if (l != LoyaltyLevel.BRONZE && from <= prevFrom) {
-                throw ApiException.badRequest(l.label() + " chegarasi oldingi darajadan katta bo'lsin");
+                throw ApiException.badRequest(I18n.t("err.loy.fromOrder", l.label()));
             }
-            if (in.cashbackPct() < prevCash) throw ApiException.badRequest(l.label() + " darajasida keshbek oldingi darajadan kam bo'lmasin");
-            if (in.discountPct() < prevDisc) throw ApiException.badRequest(l.label() + " darajasida chegirma oldingi darajadan kam bo'lmasin");
+            if (in.cashbackPct() < prevCash) throw ApiException.badRequest(I18n.t("err.loy.cashOrder", l.label()));
+            if (in.discountPct() < prevDisc) throw ApiException.badRequest(I18n.t("err.loy.discOrder", l.label()));
             if (in.cashbackPct() + in.discountPct() > 60) {
-                throw ApiException.badRequest(l.label() + ": keshbek va chegirma birgalikda 60% dan oshmasin");
+                throw ApiException.badRequest(I18n.t("err.loy.sum60", l.label()));
             }
             prevFrom = from;
             prevCash = in.cashbackPct();
             prevDisc = in.discountPct();
         }
-        if (req.expiryDays() > 0 && req.expiryDays() < 30) throw ApiException.badRequest("Kuyish muddati kamida 30 kun bo'lsin (yoki 0 — kuymaydi)");
+        if (req.expiryDays() > 0 && req.expiryDays() < 30) throw ApiException.badRequest(I18n.t("err.loy.expiryMin"));
 
         LoyaltyProgram prog = programs.findByCenter(center).orElseGet(() -> new LoyaltyProgram(center));
         boolean wasEnabled = prog.getId() != null && prog.isEnabled();
@@ -348,8 +349,8 @@ public class LoyaltyService {
         ServiceCenter center = center(p);
         Car car = carOfCenter(center, carId);
         LoyaltyProgram prog = requireEnabled(center);
-        if (account(center, car).isPresent()) throw ApiException.badRequest("Bu mijozda karta allaqachon bor");
-        if (blacklisted(center, car)) throw ApiException.badRequest("Mijoz qora ro'yxatda — karta ochib bo'lmaydi");
+        if (account(center, car).isPresent()) throw ApiException.badRequest(I18n.t("err.loy.hasCard"));
+        if (blacklisted(center, car)) throw ApiException.badRequest(I18n.t("err.loy.blacklisted"));
         LoyaltyAccount acc = open(prog, car, p.fullName(), true);
         audit.staff(p, center, prettyPlate(car.getPlateNumber()) + " uchun jamg'arma karta ochdi: " + prettyCard(acc.getCardNumber()));
         return customer(p, carId);
@@ -386,10 +387,10 @@ public class LoyaltyService {
     public CustomerLoyalty adjust(AdminPrincipal p, Long carId, AdjustRequest req) {
         ServiceCenter center = center(p);
         Car car = carOfCenter(center, carId);
-        LoyaltyAccount acc = account(center, car).orElseThrow(() -> ApiException.badRequest("Mijozda jamg'arma karta yo'q"));
+        LoyaltyAccount acc = account(center, car).orElseThrow(() -> ApiException.badRequest(I18n.t("err.loy.noCard")));
         long pts = req.points();
-        if (pts == 0) throw ApiException.badRequest("Ball miqdori 0 bo'lmasin");
-        if (pts < 0 && -pts > acc.getBalance()) throw ApiException.badRequest("Balansda faqat " + points(acc.getBalance()) + " bor");
+        if (pts == 0) throw ApiException.badRequest(I18n.t("err.loy.zero"));
+        if (pts < 0 && -pts > acc.getBalance()) throw ApiException.badRequest(I18n.t("err.loy.balanceOnly", points(acc.getBalance())));
         String note = req.note().trim();
         if (pts > 0) {
             credit(acc, LoyaltyTransaction.Type.MANUAL_ADD, pts, null, note, p.fullName());
@@ -399,8 +400,8 @@ public class LoyaltyService {
         }
         audit.staff(p, center, prettyPlate(car.getPlateNumber()) + " kartasiga " + (pts > 0 ? "+" : "−") + points(Math.abs(pts))
                 + " (" + note + "), balans " + points(acc.getBalance()));
-        send(acc, (pts > 0 ? "🎁 Kartangizga <b>+" + points(pts) + "</b> qo'shildi" : "➖ Kartangizdan <b>" + points(-pts) + "</b> ayirildi")
-                + "\nSabab: " + html(note) + "\n\n💳 Balans: <b>" + points(acc.getBalance()) + "</b>\n📍 " + html(center.getName()));
+        send(acc, () -> (pts > 0 ? I18n.t("bot.loy.added", points(pts)) : I18n.t("bot.loy.subtracted", points(-pts)))
+                + "\n" + I18n.t("bot.loy.reason", html(note)) + "\n\n" + I18n.t("bot.loy.balance", points(acc.getBalance())) + "\n📍 " + html(center.getName()));
         return customer(p, carId);
     }
 
@@ -425,8 +426,8 @@ public class LoyaltyService {
                 a.setBirthdayBonusYear(today.getYear());
                 credit(a, LoyaltyTransaction.Type.BIRTHDAY, prog.getBirthdayBonus(), null, "Tug'ilgan kun sovg'asi", "Tizim");
                 out.computeIfAbsent(car.getId(), k -> new ArrayList<>()).add(new Gift(car.getTelegramChatId(),
-                        "🎁 <b>" + html(prog.getCenter().getName()) + "</b> sizga <b>" + points(prog.getBirthdayBonus())
-                                + "</b> sovg'a qildi (balans: " + points(a.getBalance()) + ")"));
+                        LangContext.with(car.lang(), () -> I18n.t("bot.bday.gift", html(prog.getCenter().getName()),
+                                points(prog.getBirthdayBonus()), points(a.getBalance())))));
             }
         }
         return out;
@@ -447,14 +448,11 @@ public class LoyaltyService {
                     a.addExpired(amount);
                     txs.save(new LoyaltyTransaction(a, LoyaltyTransaction.Type.EXPIRE, -amount, null,
                             prog.getExpiryDays() + " kun faollik bo'lmadi", "Tizim"));
-                    send(a, "🔥 <b>" + html(prog.getCenter().getName()) + "</b> kartangizdagi <b>" + points(amount)
-                            + "</b> kuydi — " + prog.getExpiryDays() + " kun davomida tashrif bo'lmadi.\n\nKeyingi tashrifda yana ball yig'ishingiz mumkin.");
+                    send(a, () -> I18n.t("bot.loy.expired", html(prog.getCenter().getName()), points(amount), prog.getExpiryDays()));
                     burned++;
                 } else if (left <= WARN_DAYS && prog.getExpiryDays() > WARN_DAYS && a.getExpiryWarnedOn() == null) {
                     a.setExpiryWarnedOn(today);
-                    send(a, "⏳ <b>" + html(prog.getCenter().getName()) + "</b> kartangizdagi <b>" + points(a.getBalance())
-                            + "</b> " + date(expires) + " da kuyadi (" + left + " kun qoldi).\n\n"
-                            + "Ballarni saqlab qolish uchun shu kungacha servisga keling — ballarni to'lovda ishlatishingiz mumkin."
+                    send(a, () -> I18n.t("bot.loy.expiring", html(prog.getCenter().getName()), points(a.getBalance()), date(expires), left)
                             + (prog.getCenter().getPhone() != null ? "\n📞 " + prettyPhone(prog.getCenter().getPhone()) : ""));
                     warned++;
                 }
@@ -474,7 +472,7 @@ public class LoyaltyService {
         for (LoyaltyAccount a : accounts.findAllForCar(car)) {
             LoyaltyProgram prog = programOrDefault(a.getCenter());
             CardDto c = card(a, prog, today);
-            out.add(new PublicCard(a.getCenter().getName(), c.cardDisplay(), c.levelLabel(), c.levelIcon(), c.balance(),
+            out.add(new PublicCard(a.getCenter().getName(), c.cardDisplay(), c.level(), c.levelLabel(), c.levelIcon(), c.balance(),
                     prog.isEnabled() ? c.cashbackPct() : 0, prog.isEnabled() ? c.discountPct() : 0,
                     c.nextLevelLabel(), c.toNextLevel(), c.expiresOn(), prog.isEnabled() && a.getCenter().isActive()));
         }
@@ -490,27 +488,26 @@ public class LoyaltyService {
             if (cards.isEmpty()) continue;
             sb.append("🚗 <b>").append(html(prettyPlate(car.getPlateNumber()))).append("</b>\n");
             for (PublicCard c : cards) {
-                sb.append("\n💳 <b>").append(html(c.centerName())).append("</b> · karta ").append(c.cardDisplay()).append("\n")
+                sb.append("\n💳 <b>").append(html(c.centerName())).append("</b> · ").append(I18n.t("bot.loy.card", c.cardDisplay())).append("\n")
                         .append("   ").append(c.levelIcon()).append(" ").append(c.levelLabel())
-                        .append(" · balans <b>").append(points(c.balance())).append("</b>\n");
+                        .append(" · ").append(I18n.t("bot.loy.balanceShort", points(c.balance()))).append("\n");
                 if (!c.active()) {
-                    sb.append("   Dastur hozir to'xtatilgan\n");
+                    sb.append("   ").append(I18n.t("bot.loy.paused")).append("\n");
                     continue;
                 }
-                sb.append("   Keshbek ").append(c.cashbackPct()).append("%")
-                        .append(c.discountPct() > 0 ? ", chegirma " + c.discountPct() + "%" : "").append("\n");
+                sb.append("   ").append(I18n.t("bot.loy.cashback", c.cashbackPct()))
+                        .append(c.discountPct() > 0 ? ", " + I18n.t("bot.loy.discount", c.discountPct()) : "").append("\n");
                 if (c.nextLevelLabel() != null) {
-                    sb.append("   ").append(c.nextLevelLabel()).append(" darajagacha: ").append(money(c.toNextLevel())).append("\n");
+                    sb.append("   ").append(I18n.t("bot.loy.toNext", c.nextLevelLabel(), money(c.toNextLevel()))).append("\n");
                 }
                 if (c.expiresOn() != null && c.balance() > 0) {
-                    sb.append("   Ballar ").append(date(c.expiresOn())).append(" gacha amal qiladi\n");
+                    sb.append("   ").append(I18n.t("bot.loy.validUntil", date(c.expiresOn()))).append("\n");
                 }
             }
             sb.append("\n");
         }
-        return sb.isEmpty()
-                ? "Sizda hali jamg'arma karta yo'q.\nSadoqat dasturi bor avtoservisda ish qildirsangiz, karta avtomatik ochiladi."
-                : "🎁 <b>Jamg'arma kartalarim</b>\n\n" + sb.toString().trim() + "\n\n1 ball = 1 so'm. Ballarni servisda to'lovda ishlatish mumkin.";
+        return sb.isEmpty() ? I18n.t("bot.loy.noCards")
+                : I18n.t("bot.loy.title") + "\n\n" + sb.toString().trim() + "\n\n" + I18n.t("bot.loy.footer");
     }
 
     // =====================================================================
@@ -528,13 +525,11 @@ public class LoyaltyService {
         long bonus = welcome ? prog.getWelcomeBonus() : 0;
         if (bonus > 0) credit(acc, LoyaltyTransaction.Type.WELCOME, bonus, null, "Karta ochildi", actor);
         LoyaltyLevel l = acc.getLevel();
-        send(acc, "💳 <b>" + html(center.getName()) + "</b> jamg'arma kartangiz ochildi!\n\n"
-                + "Karta raqami: <b>" + prettyCard(acc.getCardNumber()) + "</b>\n"
-                + "Daraja: " + l.icon() + " " + l.label() + "\n"
-                + (bonus > 0 ? "🎁 Sovg'a: <b>" + points(bonus) + "</b>\n" : "")
-                + "\nHar to'lovdan " + prog.cashbackPct(l) + "% ball qaytadi"
-                + (prog.discountPct(l) > 0 ? ", doimiy chegirma " + prog.discountPct(l) + "%" : "") + ".\n"
-                + "1 ball = 1 so'm — keyingi ishlarda to'lovga ishlatiladi.\n\nBalansni ko'rish: /ball");
+        send(acc, () -> I18n.t("bot.loy.opened", html(center.getName()), prettyCard(acc.getCardNumber()), l.icon() + " " + l.label())
+                + (bonus > 0 ? "\n" + I18n.t("bot.loy.welcomeGift", points(bonus)) : "")
+                + "\n\n" + I18n.t("bot.loy.terms", prog.cashbackPct(l))
+                + (prog.discountPct(l) > 0 ? I18n.t("bot.loy.termsDiscount", prog.discountPct(l)) : "") + ".\n"
+                + I18n.t("bot.loy.pointRule") + "\n\n" + I18n.t("bot.loy.seeBalance"));
         return acc;
     }
 
@@ -551,15 +546,14 @@ public class LoyaltyService {
 
     private void notifyLevelUp(LoyaltyAccount acc, LoyaltyProgram prog) {
         LoyaltyLevel l = acc.getLevel();
-        send(acc, "🎉 <b>Tabriklaymiz!</b> Siz <b>" + html(prog.getCenter().getName()) + "</b> da "
-                + l.icon() + " <b>" + l.label() + "</b> darajaga ko'tarildingiz.\n\n"
-                + "Endi har to'lovdan <b>" + prog.cashbackPct(l) + "%</b> ball qaytadi"
-                + (prog.discountPct(l) > 0 ? " va barcha ishlarga <b>" + prog.discountPct(l) + "%</b> chegirma" : "") + ".");
+        send(acc, () -> I18n.t("bot.loy.levelUp", html(prog.getCenter().getName()), l.icon() + " <b>" + l.label() + "</b>", prog.cashbackPct(l))
+                + (prog.discountPct(l) > 0 ? I18n.t("bot.loy.levelUpDiscount", prog.discountPct(l)) : "") + ".");
     }
 
-    private void send(LoyaltyAccount acc, String text) {
+    /** Mijozga xabar — uning tilida tuziladi (matn Supplier ichida, LangContext mijoz tiliga o'rnatilgan holda). */
+    private void send(LoyaltyAccount acc, java.util.function.Supplier<String> text) {
         Long chat = acc.getCar().getTelegramChatId();
-        if (chat != null) telegram.sendLater(chat, text);
+        if (chat != null) telegram.sendLater(chat, LangContext.with(acc.getCar().lang(), text));
     }
 
     private LoyaltyLevel levelOf(LoyaltyProgram prog, ServiceCenter center, Car car) {
@@ -637,24 +631,24 @@ public class LoyaltyService {
 
     private LoyaltyProgram requireEnabled(ServiceCenter center) {
         LoyaltyProgram prog = activeProgram(center);
-        if (prog == null) throw ApiException.badRequest("Avval sadoqat dasturini yoqing (Sadoqat bo'limi)");
+        if (prog == null) throw ApiException.badRequest(I18n.t("err.loy.enableFirst"));
         return prog;
     }
 
     /** Mijoz shu servisniki: ish kiritilgan, qo'lda qo'shilgan yoki kartasi bor. */
     private Car carOfCenter(ServiceCenter center, Long carId) {
-        Car car = cars.findById(carId).orElseThrow(() -> ApiException.notFound("Mijoz topilmadi"));
+        Car car = cars.findById(carId).orElseThrow(() -> ApiException.notFound(I18n.t("err.customer.notFound")));
         if (records.existsByCarAndCenter(car, center) || notes.findByCenterAndCar(center, car).isPresent()
                 || accounts.findByCenterAndCar(center, car).isPresent()) {
             return car;
         }
-        throw ApiException.notFound("Mijoz topilmadi");
+        throw ApiException.notFound(I18n.t("err.customer.notFound"));
     }
 
     private ServiceCenter center(AdminPrincipal p) {
         ServiceCenter c = centers.findById(p.centerId())
-                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "Servis topilmadi"));
-        if (!c.isActive()) throw new ApiException(HttpStatus.FORBIDDEN, "Bu avtoservis o'chirilgan");
+                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, I18n.t("err.center.notFound")));
+        if (!c.isActive()) throw new ApiException(HttpStatus.FORBIDDEN, I18n.t("err.center.disabled"));
         return c;
     }
 

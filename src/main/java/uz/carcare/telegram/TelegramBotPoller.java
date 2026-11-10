@@ -7,13 +7,17 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import uz.carcare.admin.AdminTwoFactorService;
 import uz.carcare.config.AppProperties;
-import uz.carcare.reminder.MileageService;
+import uz.carcare.i18n.I18n;
+import uz.carcare.i18n.Lang;
+import uz.carcare.i18n.LangContext;
 import uz.carcare.model.Car;
+import uz.carcare.reminder.MileageService;
 import uz.carcare.util.RateLimiter;
 import uz.carcare.web.ApiException;
 import uz.carcare.web.CarService;
 import uz.carcare.web.CustomerLoginService;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,6 +27,9 @@ import static uz.carcare.util.Formats.prettyPlate;
 /**
  * Bitta bot hamma foydalanuvchilarga xizmat qiladi (long polling).
  *
+ * Til: chatga ulangan mashinaning tili (o'zbek/rus); ulanmagan chat uchun Telegram'dagi til.
+ * /uz va /ru buyruqlari (yoki /lang tugmalari) tilni almashtiradi.
+ *
  * Spamdan himoya:
  *  - har bir foydalanuvchi 1 daqiqada ko'pi bilan 15 ta xabar yubora oladi,
  *    undan ortig'i javobsiz tashlab yuboriladi (bot ishlashda davom etadi);
@@ -30,7 +37,7 @@ import static uz.carcare.util.Formats.prettyPlate;
  *  - guruh va kanallardagi xabarlar e'tiborsiz qoldiriladi.
  *
  * Mashinani ulash (bepul tasdiqlash, SMS shart emas):
- *   1. Sahifadagi tugma → /start TOKEN
+ *   1. Sahifadagi tugma yoki chekdagi QR → /start TOKEN
  *   2. Bot "📱 Raqamni yuborish" tugmasini ko'rsatadi
  *   3. Telegram'dagi raqam ro'yxatdan o'tgan raqamga mos kelsa — ulanadi
  */
@@ -82,6 +89,8 @@ public class TelegramBotPoller {
                     else handle(upd.path("message"));
                 } catch (Exception e) {
                     log.error("Bot xabarini qayta ishlashda xato", e);
+                } finally {
+                    LangContext.clear();
                 }
             }
         } catch (Exception e) {
@@ -97,16 +106,25 @@ public class TelegramBotPoller {
         if (pendingLinks.size() > 10_000) pendingLinks.clear(); // xotira to'lib ketmasligi uchun
     }
 
+    /** Chat tili: ulangan mashinaning tili, bo'lmasa Telegram profilidagi til. */
+    private Lang langOf(long chatId, JsonNode from) {
+        List<Car> list = cars.carsOf(chatId);
+        if (!list.isEmpty()) return list.get(0).lang();
+        return Lang.fromTelegram(from.path("language_code").asText(""));
+    }
+
     private void handle(JsonNode msg) {
         if (msg.isMissingNode()) return;
         if (!"private".equals(msg.path("chat").path("type").asText())) return; // guruhlar e'tiborsiz
 
         long chatId = msg.path("chat").path("id").asLong();
+        JsonNode from = msg.path("from");
+        LangContext.set(langOf(chatId, from));
 
         // ---- Spam himoyasi ----
         if (!perUser.tryAcquire(String.valueOf(chatId))) {
             if (spamWarning.tryAcquire(String.valueOf(chatId))) {
-                telegram.sendMessage(chatId, "⏳ Juda ko'p xabar yuboryapsiz. Bir daqiqadan keyin urinib ko'ring.");
+                telegram.sendMessage(chatId, I18n.t("bot.tooMany"));
             }
             return;
         }
@@ -118,12 +136,12 @@ public class TelegramBotPoller {
         if (!msg.has("text")) return;
 
         String text = msg.path("text").asText("").trim();
-        String name = msg.path("from").path("first_name").asText("");
+        String name = from.path("first_name").asText("");
 
         if (text.startsWith("/start")) {
             String token = text.length() > 6 ? text.substring(6).trim() : "";
             if (token.isEmpty()) {
-                telegram.sendMessage(chatId, welcome(name));
+                telegram.sendMessage(chatId, welcome(name), langKeyboard());
                 return;
             }
             // Super admin 2FA ni ulash: /start adm_KOD (panelda «Telegram'ga ulash» tugmasidan)
@@ -133,14 +151,11 @@ public class TelegramBotPoller {
             }
             String plate = cars.plateByToken(token);
             if (plate == null) {
-                telegram.sendMessage(chatId, "❌ Havola noto'g'ri yoki eskirgan. Mashina sahifasidan qayta urinib ko'ring.");
+                telegram.sendMessage(chatId, I18n.t("bot.badLink"));
                 return;
             }
             pendingLinks.put(chatId, token);
-            telegram.sendMessage(chatId,
-                    "🚗 <b>" + html(prettyPlate(plate)) + "</b> mashinasini ulash uchun telefon raqamingizni tasdiqlang.\n\n"
-                            + "Pastdagi <b>📱 Raqamni yuborish</b> tugmasini bosing.",
-                    TelegramClient.contactKeyboard());
+            telegram.sendMessage(chatId, I18n.t("bot.confirmPhone", html(prettyPlate(plate))), TelegramClient.contactKeyboard());
         } else if (text.startsWith("/holat") || text.startsWith("/status")) {
             telegram.sendMessage(chatId, cars.statusText(chatId));
         } else if (text.startsWith("/ball") || text.startsWith("/bonus") || text.startsWith("/karta")) {
@@ -148,14 +163,32 @@ public class TelegramBotPoller {
         } else if (text.startsWith("/probeg") || text.startsWith("/km") || MileageService.parseKm(text) != null) {
             // "/probeg 123456", faqat "123456" yoki "01A123BC 123456" — probegni yangilash
             telegram.sendMessage(chatId, mileage.fromTelegram(chatId, text));
+        } else if (text.startsWith("/ru") || text.startsWith("/uz")) {
+            switchLang(chatId, text.startsWith("/ru") ? Lang.RU : Lang.UZ);
+        } else if (text.startsWith("/lang") || text.startsWith("/til") || text.startsWith("/язык")) {
+            telegram.sendMessage(chatId, I18n.t("bot.chooseLang"), langKeyboard());
         } else {
-            telegram.sendMessage(chatId, welcome(name));
+            telegram.sendMessage(chatId, welcome(name), langKeyboard());
         }
     }
 
+    /** Tilni almashtirish: ulangan mashinalar uchun saqlanadi, ulanmagan chatga faqat javob tilida. */
+    private void switchLang(long chatId, Lang lang) {
+        int n = cars.setLang(chatId, lang);
+        LangContext.set(lang);
+        telegram.sendMessage(chatId, I18n.t("bot.langSet") + (n == 0 ? "\n" + I18n.t("bot.langNotLinked") : ""),
+                TelegramClient.removeKeyboard());
+    }
+
+    private static Map<String, Object> langKeyboard() {
+        return TelegramClient.inlineKeyboard(new Object[][]{
+                {TelegramClient.button("🇺🇿 O'zbekcha", "lang:uz"), TelegramClient.button("🇷🇺 Русский", "lang:ru")}
+        });
+    }
+
     /**
-     * Inline tugmalar: kirish so'rovini tasdiqlash / rad etish va rad etgandan keyin havolani yangilash.
-     *   lg:ok:KOD — «Ha, bu men»,  lg:no:KOD — «Yo'q»,  rt:KOD — «Havolani yangilash».
+     * Inline tugmalar: kirish so'rovini tasdiqlash / rad etish, rad etgandan keyin havolani yangilash, til.
+     *   lg:ok:KOD — «Ha, bu men»,  lg:no:KOD — «Yo'q»,  rt:KOD — «Havolani yangilash»,  lang:uz|ru — til.
      */
     private void handleCallback(JsonNode cq) {
         String callbackId = cq.path("id").asText("");
@@ -167,12 +200,20 @@ public class TelegramBotPoller {
             telegram.answerCallbackQuery(callbackId, null, false);
             return;
         }
+        LangContext.set(langOf(chatId, cq.path("from")));
         if (!perUser.tryAcquire(String.valueOf(chatId))) {
-            telegram.answerCallbackQuery(callbackId, "⏳ Juda ko'p so'rov. Bir daqiqadan keyin urinib ko'ring.", false);
+            telegram.answerCallbackQuery(callbackId, I18n.t("bot.tooMany"), false);
             return;
         }
         try {
-            if (data.startsWith("lg:ok:")) {
+            if (data.startsWith("lang:")) {
+                Lang lang = Lang.of(data.substring(5));
+                int n = cars.setLang(chatId, lang);
+                LangContext.set(lang);
+                telegram.answerCallbackQuery(callbackId, null, false);
+                telegram.editMessageText(chatId, messageId,
+                        I18n.t("bot.langSet") + (n == 0 ? "\n" + I18n.t("bot.langNotLinked") : "") + "\n\n" + welcome(cq.path("from").path("first_name").asText("")), null);
+            } else if (data.startsWith("lg:ok:")) {
                 String text = login.resolve(data.substring(6), chatId, true);
                 telegram.answerCallbackQuery(callbackId, null, false);
                 telegram.editMessageText(chatId, messageId, text, null);
@@ -181,7 +222,7 @@ public class TelegramBotPoller {
                 String text = login.resolve(code, chatId, false);
                 telegram.answerCallbackQuery(callbackId, null, false);
                 Map<String, Object> keyboard = text.startsWith("🚫")
-                        ? TelegramClient.inlineKeyboard(new Object[][]{{TelegramClient.button("🔄 Havolani yangilash", "rt:" + code)}})
+                        ? TelegramClient.inlineKeyboard(new Object[][]{{TelegramClient.button(I18n.t("bot.btn.rotate"), "rt:" + code)}})
                         : null;
                 telegram.editMessageText(chatId, messageId, text, keyboard);
             } else if (data.startsWith("rt:")) {
@@ -199,25 +240,22 @@ public class TelegramBotPoller {
     private void handleContact(long chatId, JsonNode msg) {
         String token = pendingLinks.get(chatId);
         if (token == null) {
-            telegram.sendMessage(chatId, "Avval mashina sahifasidagi <b>\"Telegramga ulash\"</b> tugmasini bosing.",
-                    TelegramClient.removeKeyboard());
+            telegram.sendMessage(chatId, I18n.t("bot.pressLinkFirst"), TelegramClient.removeKeyboard());
             return;
         }
         JsonNode contact = msg.path("contact");
         // Faqat o'z raqamini yuborishi kerak (boshqa odamning kontaktini emas)
         if (contact.path("user_id").asLong() != msg.path("from").path("id").asLong()) {
-            telegram.sendMessage(chatId, "❌ Faqat o'zingizning raqamingizni yuboring — pastdagi tugmani bosing.",
-                    TelegramClient.contactKeyboard());
+            telegram.sendMessage(chatId, I18n.t("bot.ownContactOnly"), TelegramClient.contactKeyboard());
             return;
         }
         try {
-            Car car = cars.linkTelegram(token, chatId, contact.path("phone_number").asText(""));
+            Lang tgLang = Lang.fromTelegram(msg.path("from").path("language_code").asText(""));
+            Car car = cars.linkTelegram(token, chatId, contact.path("phone_number").asText(""), tgLang);
             pendingLinks.remove(chatId);
+            LangContext.set(car.lang());
             telegram.sendMessage(chatId,
-                    "✅ <b>" + html(prettyPlate(car.getPlateNumber())) + "</b> mashinasi ulandi!\n\n"
-                            + "Servis muddatiga " + app.reminderDaysBefore()
-                            + " kun qolganda va muddat kelgan kuni shu yerga eslatma keladi.\n\n"
-                            + cars.statusText(chatId),
+                    I18n.t("bot.linked", html(prettyPlate(car.getPlateNumber())), app.reminderDaysBefore()) + "\n\n" + cars.statusText(chatId),
                     TelegramClient.removeKeyboard());
         } catch (ApiException e) {
             pendingLinks.remove(chatId);
@@ -226,12 +264,7 @@ public class TelegramBotPoller {
     }
 
     private String welcome(String name) {
-        return "Assalomu alaykum" + (name.isBlank() ? "" : ", " + html(name)) + "! 👋\n\n"
-                + "Men mashinangiz servislari (moy, filtrlar, sug'urta va h.k.) muddatini eslatib turaman.\n\n"
-                + "1️⃣ Saytda ro'yxatdan o'ting: " + app.baseUrl() + "\n"
-                + "2️⃣ Mashina sahifasida <b>\"Telegramga ulash\"</b> tugmasini bosing\n\n"
-                + "Buyruqlar:\n/holat — mashinalarim va yaqin servislar\n/ball — jamg'arma kartalarim va bonus ballarim\n"
-                + "/probeg 123456 — probegni yangilash (yoki shunchaki raqam yozing); km bo'yicha servis yaqinlashsa eslataman";
+        return I18n.t("bot.welcome", name.isBlank() ? "" : ", " + html(name), app.baseUrl());
     }
 
     private static void sleepQuietly(long ms) {

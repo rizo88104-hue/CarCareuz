@@ -25,25 +25,25 @@ public final class LoyaltyDtos {
     }
 
     public record LevelInput(
-            @NotNull(message = "Darajani ko'rsating") LoyaltyLevel level,
-            @NotNull(message = "Daraja chegarasini kiriting") @PositiveOrZero(message = "Chegara manfiy bo'lmasin")
-            @Max(value = 100_000_000_000L, message = "Chegara juda katta") Long from,
-            @NotNull(message = "Keshbek foizini kiriting") @Min(value = 0, message = "Keshbek 0–30% bo'lsin")
-            @Max(value = 30, message = "Keshbek 0–30% bo'lsin") Integer cashbackPct,
-            @NotNull(message = "Chegirma foizini kiriting") @Min(value = 0, message = "Chegirma 0–50% bo'lsin")
-            @Max(value = 50, message = "Chegirma 0–50% bo'lsin") Integer discountPct
+            @NotNull(message = "{v.level}") LoyaltyLevel level,
+            @NotNull(message = "{v.levelFrom}") @PositiveOrZero(message = "{v.levelFromNeg}")
+            @Max(value = 100_000_000_000L, message = "{v.levelFromBig}") Long from,
+            @NotNull(message = "{v.cashback}") @Min(value = 0, message = "{v.cashbackRange}")
+            @Max(value = 30, message = "{v.cashbackRange}") Integer cashbackPct,
+            @NotNull(message = "{v.discount}") @Min(value = 0, message = "{v.discountRange}")
+            @Max(value = 50, message = "{v.discountRange}") Integer discountPct
     ) {
     }
 
     public record ProgramRequest(
             @NotNull Boolean enabled,
-            @NotNull @Size(min = 4, max = 4, message = "To'rtta daraja bo'lishi kerak") List<@Valid LevelInput> levels,
-            @NotNull @Min(value = 0, message = "Ball bilan to'lash ulushi 0–100% bo'lsin")
-            @Max(value = 100, message = "Ball bilan to'lash ulushi 0–100% bo'lsin") Integer maxRedeemPct,
-            @NotNull @PositiveOrZero(message = "Bonus manfiy bo'lmasin") @Max(value = 10_000_000, message = "Bonus juda katta") Long welcomeBonus,
-            @NotNull @PositiveOrZero(message = "Bonus manfiy bo'lmasin") @Max(value = 10_000_000, message = "Bonus juda katta") Long birthdayBonus,
-            @NotNull @Min(value = 0, message = "Kuyish muddati manfiy bo'lmasin")
-            @Max(value = 3650, message = "Kuyish muddati 10 yildan oshmasin") Integer expiryDays
+            @NotNull @Size(min = 4, max = 4, message = "{v.fourLevels}") List<@Valid LevelInput> levels,
+            @NotNull @Min(value = 0, message = "{v.redeemRange}")
+            @Max(value = 100, message = "{v.redeemRange}") Integer maxRedeemPct,
+            @NotNull @PositiveOrZero(message = "{v.bonusNeg}") @Max(value = 10_000_000, message = "{v.bonusBig}") Long welcomeBonus,
+            @NotNull @PositiveOrZero(message = "{v.bonusNeg}") @Max(value = 10_000_000, message = "{v.bonusBig}") Long birthdayBonus,
+            @NotNull @Min(value = 0, message = "{v.expiryNeg}")
+            @Max(value = 3650, message = "{v.expiryBig}") Integer expiryDays
     ) {
     }
 
@@ -89,9 +89,9 @@ public final class LoyaltyDtos {
     }
 
     public record AdjustRequest(
-            @NotNull(message = "Ball miqdorini kiriting") @Min(value = -100_000_000, message = "Miqdor juda katta")
-            @Max(value = 100_000_000, message = "Miqdor juda katta") Long points,
-            @NotBlank(message = "Sababini yozing") @Size(max = 200, message = "Sabab juda uzun") String note
+            @NotNull(message = "{v.points}") @Min(value = -100_000_000, message = "{v.pointsBig}")
+            @Max(value = 100_000_000, message = "{v.pointsBig}") Long points,
+            @NotBlank(message = "{v.reason}") @Size(max = 200, message = "{v.reasonLong}") String note
     ) {
     }
 
@@ -102,7 +102,7 @@ public final class LoyaltyDtos {
     }
 
     /** Mijoz sahifasi (car.html) va bot uchun. */
-    public record PublicCard(String centerName, String cardDisplay, String levelLabel, String levelIcon,
+    public record PublicCard(String centerName, String cardDisplay, String level, String levelLabel, String levelIcon,
                              long balance, int cashbackPct, int discountPct,
                              String nextLevelLabel, Long toNextLevel, LocalDate expiresOn, boolean active) {
     }

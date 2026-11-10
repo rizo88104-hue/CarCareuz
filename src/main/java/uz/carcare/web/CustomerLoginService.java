@@ -8,6 +8,9 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.carcare.admin.AuditService;
 import uz.carcare.config.AppProperties;
 import uz.carcare.dto.Dtos.LoginStatusDto;
+import uz.carcare.i18n.I18n;
+import uz.carcare.i18n.Lang;
+import uz.carcare.i18n.LangContext;
 import uz.carcare.model.Car;
 import uz.carcare.model.LoginRequest;
 import uz.carcare.model.LoginRequest.Status;
@@ -30,6 +33,8 @@ import static uz.carcare.util.Formats.*;
  *
  * 2. Havolani yangilash. Mashina sahifasining maxfiy kaliti almashtiriladi, eski havola
  *    shu zahoti ishlamay qoladi. Sahifadagi tugma yoki botdagi tugma orqali qilinadi.
+ *
+ * Telegram xabarlari mijozning tilida (Car.lang).
  */
 @Service
 public class CustomerLoginService {
@@ -65,26 +70,20 @@ public class CustomerLoginService {
     public LoginRequest start(Car car) {
         Instant now = Instant.now();
         if (requests.countByCarAndCreatedAtAfter(car, now.minus(WINDOW)) >= MAX_PER_WINDOW) {
-            throw ApiException.badRequest("Tasdiqlash so'rovi allaqachon yuborilgan. Telegram botni oching va "
-                    + "«Ha, bu men» tugmasini bosing, yoki 10 daqiqadan keyin qayta urinib ko'ring.");
+            throw ApiException.badRequest(I18n.t("err.login.tooMany"));
         }
         LoginRequest r = requests.save(new LoginRequest(car, newToken(), now.plus(TTL)));
 
+        Lang lang = car.lang();
         String plate = html(prettyPlate(car.getPlateNumber()));
-        String text = "🔐 <b>" + plate + "</b> sahifasiga kirish so'rovi\n\n"
-                + "Kimdir saytda sizning telefon va mashina raqamingizni kiritib, mashina sahifangizga kirmoqchi.\n\n"
-                + "Bu sizmisiz?\n"
-                + "• Siz bo'lsangiz — <b>✅ Ha, bu men</b> ni bosing, brauzerda sahifa ochiladi.\n"
-                + "• Siz bo'lmasangiz — <b>❌ Yo'q</b> ni bosing, hech kim kira olmaydi.\n\n"
-                + "So'rov " + TTL.toMinutes() + " daqiqa amal qiladi.";
+        String text = I18n.t(lang, "bot.login.request", plate, TTL.toMinutes());
         Map<String, Object> keyboard = TelegramClient.inlineKeyboard(new Object[][]{
-                {TelegramClient.button("✅ Ha, bu men", "lg:ok:" + r.getCode()),
-                 TelegramClient.button("❌ Yo'q", "lg:no:" + r.getCode())}
+                {TelegramClient.button(I18n.t(lang, "bot.btn.yesMe"), "lg:ok:" + r.getCode()),
+                 TelegramClient.button(I18n.t(lang, "bot.btn.no"), "lg:no:" + r.getCode())}
         });
         if (!telegram.sendMessage(car.getTelegramChatId(), text, keyboard)) {
             r.setStatus(Status.EXPIRED);
-            throw ApiException.badRequest("Telegram'ga tasdiqlash xabari yuborilmadi. Botni bloklagan bo'lsangiz, "
-                    + "uni oching va qayta urinib ko'ring. Yordam kerak bo'lsa, avtoservisingizga murojaat qiling.");
+            throw ApiException.badRequest(I18n.t("err.login.notSent"));
         }
         return r;
     }
@@ -92,7 +91,7 @@ public class CustomerLoginService {
     /** Brauzer har 2 soniyada so'raydi. Tasdiqlangan bo'lsa havola bir marta qaytariladi. */
     @Transactional
     public LoginStatusDto poll(String code) {
-        LoginRequest r = requests.findByCode(code).orElseThrow(() -> ApiException.notFound("So'rov topilmadi"));
+        LoginRequest r = requests.findByCode(code).orElseThrow(() -> ApiException.notFound(I18n.t("err.login.notFound")));
         if (r.getStatus() == Status.PENDING && r.isExpired(Instant.now())) r.setStatus(Status.EXPIRED);
         return switch (r.getStatus()) {
             case PENDING -> new LoginStatusDto("pending", null, null);
@@ -108,46 +107,43 @@ public class CustomerLoginService {
 
     /**
      * Botdagi «Ha» / «Yo'q» tugmasi. Faqat mashina ulangan chatdan qabul qilinadi.
-     * Qaytgan matn botdagi xabar o'rniga yoziladi.
+     * Qaytgan matn botdagi xabar o'rniga yoziladi (mijoz tilida).
      */
     @Transactional
     public String resolve(String code, long chatId, boolean approve) {
-        LoginRequest r = requests.findByCode(code).orElseThrow(() -> ApiException.notFound("So'rov topilmadi"));
+        LoginRequest r = requests.findByCode(code).orElseThrow(() -> ApiException.notFound(I18n.t("err.login.notFound")));
         Car car = r.getCar();
         if (car.getTelegramChatId() == null || car.getTelegramChatId() != chatId) {
-            throw ApiException.badRequest("Bu so'rov sizning mashinangizga tegishli emas");
+            throw ApiException.badRequest(I18n.t("err.login.notYours"));
         }
-        String plate = html(prettyPlate(car.getPlateNumber()));
-        if (r.getStatus() != Status.PENDING) {
-            return "🔐 <b>" + plate + "</b> — bu so'rov allaqachon yakunlangan.";
-        }
-        if (r.isExpired(Instant.now())) {
-            r.setStatus(Status.EXPIRED);
-            return "⌛ <b>" + plate + "</b> — so'rov muddati o'tdi. Saytda qayta urinib ko'ring.";
-        }
-        if (approve) {
-            r.setStatus(Status.APPROVED);
-            audit.system(car.getFullName(), "Mijoz", null, prettyPlate(car.getPlateNumber()) + " sahifasiga kirish Telegram'da tasdiqlandi");
-            return "✅ <b>" + plate + "</b> — kirish tasdiqlandi. Brauzerda sahifa ochiladi.";
-        }
-        r.setStatus(Status.DENIED);
-        audit.system(car.getFullName(), "Mijoz", null, prettyPlate(car.getPlateNumber()) + " sahifasiga kirish Telegram'da rad etildi");
-        return "🚫 <b>" + plate + "</b> — kirish rad etildi, hech kim kira olmadi.\n\n"
-                + "Agar sahifa havolangiz begona odamga tushgan deb o'ylasangiz, pastdagi tugma bilan uni yangilang — "
-                + "eski havola darhol ishlamay qoladi.";
+        return LangContext.with(car.lang(), () -> {
+            String plate = html(prettyPlate(car.getPlateNumber()));
+            if (r.getStatus() != Status.PENDING) return I18n.t("bot.login.done", plate);
+            if (r.isExpired(Instant.now())) {
+                r.setStatus(Status.EXPIRED);
+                return I18n.t("bot.login.expired", plate);
+            }
+            if (approve) {
+                r.setStatus(Status.APPROVED);
+                audit.system(car.getFullName(), "Mijoz", null, prettyPlate(car.getPlateNumber()) + " sahifasiga kirish Telegram'da tasdiqlandi");
+                return I18n.t("bot.login.approved", plate);
+            }
+            r.setStatus(Status.DENIED);
+            audit.system(car.getFullName(), "Mijoz", null, prettyPlate(car.getPlateNumber()) + " sahifasiga kirish Telegram'da rad etildi");
+            return I18n.t("bot.login.denied", plate); // "🚫" bilan boshlanadi — poller shunga qarab tugma qo'shadi
+        });
     }
 
     /** Botdagi «Havolani yangilash» tugmasi (rad etilgan so'rovdan keyin). */
     @Transactional
     public String rotateFromTelegram(String code, long chatId) {
-        LoginRequest r = requests.findByCode(code).orElseThrow(() -> ApiException.notFound("So'rov topilmadi"));
+        LoginRequest r = requests.findByCode(code).orElseThrow(() -> ApiException.notFound(I18n.t("err.login.notFound")));
         Car car = r.getCar();
         if (car.getTelegramChatId() == null || car.getTelegramChatId() != chatId) {
-            throw ApiException.badRequest("Bu so'rov sizning mashinangizga tegishli emas");
+            throw ApiException.badRequest(I18n.t("err.login.notYours"));
         }
         newLink(car, "Telegram bot orqali");
-        return "✅ <b>" + html(prettyPlate(car.getPlateNumber())) + "</b> — havola yangilandi, eski havola endi ishlamaydi.\n"
-                + "Yangi havola alohida xabarda keladi.";
+        return I18n.t(car.lang(), "bot.rotate.done", html(prettyPlate(car.getPlateNumber())));
     }
 
     /**
@@ -161,10 +157,7 @@ public class CustomerLoginService {
         audit.system(car.getFullName(), "Mijoz", null, prettyPlate(car.getPlateNumber()) + " sahifasi havolasi yangilandi (" + how + ")");
         if (car.getTelegramChatId() != null) {
             telegram.sendLater(car.getTelegramChatId(),
-                    "🔄 <b>" + html(prettyPlate(car.getPlateNumber())) + "</b> sahifangiz havolasi yangilandi.\n"
-                            + "Eski havola endi ishlamaydi.\n\n"
-                            + "Yangi havola:\n" + app.carUrl(car.getToken()) + "\n\n"
-                            + "Havolani hech kimga bermang.");
+                    I18n.t(car.lang(), "bot.rotate.newLink", html(prettyPlate(car.getPlateNumber())), app.carUrl(car.getToken())));
         }
     }
 

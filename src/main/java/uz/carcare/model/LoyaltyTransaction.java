@@ -27,7 +27,12 @@ public class LoyaltyTransaction {
             this.label = label;
         }
 
+        /** Joriy tilda (LangContext). */
         public String label() {
+            return uz.carcare.i18n.I18n.t("tx." + name());
+        }
+
+        public String labelUz() {
             return label;
         }
     }

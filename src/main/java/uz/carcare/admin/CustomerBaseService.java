@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.carcare.admin.CustomerDtos.*;
 import uz.carcare.config.AppProperties;
+import uz.carcare.i18n.I18n;
+import uz.carcare.i18n.LangContext;
 import uz.carcare.config.TelegramProperties;
 import uz.carcare.loyalty.LoyaltyService;
 import uz.carcare.telegram.TelegramClient;
@@ -169,12 +171,12 @@ public class CustomerBaseService {
                 try {
                     car.setGender(Car.Gender.valueOf(req.gender()));
                 } catch (IllegalArgumentException e) {
-                    throw ApiException.badRequest("Jinsi noto'g'ri tanlangan");
+                    throw ApiException.badRequest(I18n.t("err.gender"));
                 }
             }
             cars.save(car);
         } else if (records.existsByCarAndCenter(car, center) || notes.findByCenterAndCar(center, car).isPresent()) {
-            throw ApiException.conflict("Bu mashina allaqachon bazangizda bor");
+            throw ApiException.conflict(I18n.t("err.customer.exists"));
         }
         CustomerNote note = new CustomerNote(center, car);
         if (req.note() != null && !req.note().isBlank()) note.update(req.note().trim(), p.fullName());
@@ -191,7 +193,7 @@ public class CustomerBaseService {
         CustomerNote note = notes.findByCenterAndCar(center, car).orElseGet(() -> new CustomerNote(center, car));
         String plate = prettyPlate(car.getPlateNumber());
         if (req.blacklisted()) {
-            if (req.reason() == null || req.reason().isBlank()) throw ApiException.badRequest("Qora ro'yxatga qo'shish sababini yozing");
+            if (req.reason() == null || req.reason().isBlank()) throw ApiException.badRequest(I18n.t("err.blacklist.reason"));
             note.blacklist(req.reason().trim(), p.fullName());
             audit.staff(p, center, "Qora ro'yxatga qo'shdi: " + plate + " — " + req.reason().trim());
         } else if (note.isBlacklisted()) {
@@ -207,11 +209,11 @@ public class CustomerBaseService {
     public boolean sendMessage(AdminPrincipal p, Long carId, MessageRequest req) {
         ServiceCenter center = center(p);
         Car car = carOfCenter(center, carId);
-        if (car.getTelegramChatId() == null) throw ApiException.badRequest("Mijoz Telegram botga ulanmagan. Qo'ng'iroq qiling: " + prettyPhone(car.getPhone()));
+        if (car.getTelegramChatId() == null) throw ApiException.badRequest(I18n.t("err.msg.noTelegram", prettyPhone(car.getPhone())));
         boolean ok = telegram.sendMessage(car.getTelegramChatId(),
                 "💬 <b>" + html(center.getName()) + "</b>\n\n" + html(req.text().trim())
                         + (center.getPhone() == null ? "" : "\n\n📞 " + prettyPhone(center.getPhone())));
-        if (!ok) throw ApiException.badRequest("Xabar yetkazilmadi. Mijoz botni bloklagan bo'lishi mumkin.");
+        if (!ok) throw ApiException.badRequest(I18n.t("err.msg.notDelivered"));
         audit.staff(p, center, prettyPlate(car.getPlateNumber()) + " egasiga Telegramda xabar yubordi");
         return true;
     }
@@ -230,8 +232,8 @@ public class CustomerBaseService {
                         .thenComparing(ServiceRecord::getDoneDate))
                 .toList();
         long total = open.stream().mapToLong(ServiceRecord::getRemaining).sum();
-        if (total == 0) throw ApiException.badRequest("Bu mijozda qarz yo'q");
-        if (req.amount() > total) throw ApiException.badRequest("Summa umumiy qarzdan (" + money(total) + ") oshmasin");
+        if (total == 0) throw ApiException.badRequest(I18n.t("err.debt.none"));
+        if (req.amount() > total) throw ApiException.badRequest(I18n.t("err.debt.overTotal", money(total)));
 
         Payment.Method method = req.method() == null ? Payment.Method.CASH : req.method();
         long left = req.amount();
@@ -241,14 +243,13 @@ public class CustomerBaseService {
             // Ball bilan: har bir ishda ko'pi bilan narxning belgilangan foizi
             LoyaltyProgram prog = loyalty.activeProgram(center);
             LoyaltyAccount acc = loyalty.account(center, car).orElse(null);
-            if (prog == null) throw ApiException.badRequest("Sadoqat dasturi yoqilmagan — ball bilan to'lab bo'lmaydi");
-            if (acc == null) throw ApiException.badRequest("Mijozda jamg'arma karta yo'q");
+            if (prog == null) throw ApiException.badRequest(I18n.t("err.loy.disabled"));
+            if (acc == null) throw ApiException.badRequest(I18n.t("err.loy.noCard"));
             long capTotal = open.stream().mapToLong(r -> Math.max(0, Math.min(r.getRemaining(),
                     LoyaltyService.percent(r.getPrice(), prog.getMaxRedeemPct()) - r.getBonusPaid()))).sum();
             long allowed = Math.min(acc.getBalance(), capTotal);
             if (req.amount() > allowed) {
-                throw ApiException.badRequest("Ball bilan ko'pi bilan " + money(allowed) + " to'lash mumkin (balans "
-                        + points(acc.getBalance()) + ", har bir ish narxining " + prog.getMaxRedeemPct() + "% gacha)");
+                throw ApiException.badRequest(I18n.t("err.loy.redeemCap", money(allowed), points(acc.getBalance()), prog.getMaxRedeemPct()));
             }
             for (ServiceRecord r : open) {
                 if (left == 0) break;
@@ -276,15 +277,16 @@ public class CustomerBaseService {
         }
         long rest = total - req.amount();
         String plate = prettyPlate(car.getPlateNumber());
-        audit.staff(p, center, plate + " — qarzni so'ndirish: " + money(req.amount()) + " (" + method.label().toLowerCase() + ")"
+        audit.staff(p, center, plate + " — qarzni so'ndirish: " + money(req.amount()) + " (" + method.labelUz().toLowerCase() + ")"
                 + (closed > 0 ? ", " + closed + " ta qarz yopildi" : "") + (rest > 0 ? ", qoldiq " + money(rest) : ", qarz to'liq yopildi"));
         if (car.getTelegramChatId() != null) {
-            telegram.sendLater(car.getTelegramChatId(),
-                    "🧾 <b>To'lov qabul qilindi</b>\n\n🚗 <b>" + html(plate) + "</b>\n"
-                            + "💵 To'landi: <b>" + money(req.amount()) + "</b> (" + method.label().toLowerCase() + ")\n"
-                            + (rest == 0 ? "✅ Qarz to'liq yopildi. Rahmat!" : "📌 Qolgan qarz: <b>" + money(rest) + "</b>")
-                            + LoyaltyService.receiptLine(earn)
-                            + "\n\n📍 " + html(center.getName()));
+            final LoyaltyService.Earn fEarn = earn;
+            telegram.sendLater(car.getTelegramChatId(), LangContext.with(car.lang(), () ->
+                    I18n.t("bot.payReceipt.title") + "\n\n🚗 <b>" + html(plate) + "</b>\n"
+                            + I18n.t("bot.payReceipt.paid", money(req.amount()), method.label().toLowerCase()) + "\n"
+                            + (rest == 0 ? I18n.t("bot.payReceipt.closed") : I18n.t("bot.payReceipt.rest", money(rest)))
+                            + LoyaltyService.receiptLine(fEarn)
+                            + "\n\n📍 " + html(center.getName())));
         }
         return detail(p, carId);
     }
@@ -313,7 +315,7 @@ public class CustomerBaseService {
         }
         if (req.profileEdit()) {
             if (!Objects.equals(req.birthDate(), car.getBirthDate())) {
-                if (req.birthDate() != null && req.birthDate().isAfter(today())) throw ApiException.badRequest("Tug'ilgan kun kelajakda bo'lishi mumkin emas");
+                if (req.birthDate() != null && req.birthDate().isAfter(today())) throw ApiException.badRequest(I18n.t("err.birthFuture"));
                 car.setBirthDate(req.birthDate());
                 changes.add("tug'ilgan kun");
             }
@@ -321,7 +323,7 @@ public class CustomerBaseService {
             try {
                 g = req.gender() == null || req.gender().isBlank() ? null : Car.Gender.valueOf(req.gender());
             } catch (IllegalArgumentException e) {
-                throw ApiException.badRequest("Jinsi noto'g'ri tanlangan");
+                throw ApiException.badRequest(I18n.t("err.gender"));
             }
             if (g != car.getGender()) {
                 car.setGender(g);
@@ -502,12 +504,7 @@ public class CustomerBaseService {
     }
 
     private static String statusLabel(Status s) {
-        return switch (s) {
-            case OVERDUE -> "Muddati o'tgan";
-            case SOON -> "Tez orada keladi";
-            case LOST -> "Boshqa joyga ketgan";
-            case OK -> "Faol";
-        };
+        return uz.carcare.i18n.I18n.t("cust.status." + s.name());
     }
 
     private static String csv(String s) {
@@ -520,17 +517,17 @@ public class CustomerBaseService {
 
     /** Mashina shu servisning mijozi bo'lishi shart (kamida bitta ish kiritilgan). */
     private Car carOfCenter(ServiceCenter center, Long carId) {
-        Car car = cars.findById(carId).orElseThrow(() -> ApiException.notFound("Mijoz topilmadi"));
+        Car car = cars.findById(carId).orElseThrow(() -> ApiException.notFound(I18n.t("err.customer.notFound")));
         if (!records.existsByCarAndCenter(car, center) && notes.findByCenterAndCar(center, car).isEmpty()) {
-            throw ApiException.notFound("Mijoz topilmadi");
+            throw ApiException.notFound(I18n.t("err.customer.notFound"));
         }
         return car;
     }
 
     private ServiceCenter center(AdminPrincipal p) {
         ServiceCenter c = centers.findById(p.centerId())
-                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "Servis topilmadi"));
-        if (!c.isActive()) throw new ApiException(HttpStatus.FORBIDDEN, "Bu avtoservis o'chirilgan");
+                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, I18n.t("err.center.notFound")));
+        if (!c.isActive()) throw new ApiException(HttpStatus.FORBIDDEN, I18n.t("err.center.disabled"));
         return c;
     }
 

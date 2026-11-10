@@ -43,7 +43,7 @@ public final class DebtDtos {
 
     /** Usta kiritgan ishga keyin narx qo'yish. */
     public record PriceRequest(
-            @NotNull(message = "Narxni kiriting") @Positive(message = "Narx noldan katta bo'lsin") Long price,
+            @NotNull(message = "{v.price}") @Positive(message = "{v.pricePositive}") Long price,
             LocalDate payDueDate,
             /** Sadoqat chegirmasini qo'llash (null — ha). */
             Boolean applyDiscount

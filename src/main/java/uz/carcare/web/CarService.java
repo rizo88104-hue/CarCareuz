@@ -6,6 +6,9 @@ import uz.carcare.admin.AuditService;
 import uz.carcare.config.AppProperties;
 import uz.carcare.config.TelegramProperties;
 import uz.carcare.dto.Dtos.*;
+import uz.carcare.i18n.I18n;
+import uz.carcare.i18n.Lang;
+import uz.carcare.i18n.LangContext;
 import uz.carcare.loyalty.LoyaltyService;
 import uz.carcare.model.Car;
 import uz.carcare.model.ServiceRecord;
@@ -69,10 +72,10 @@ public class CarService {
         if (existing.isPresent()) {
             Car car = existing.get();
             if (!car.getPhone().equals(phone)) {
-                throw ApiException.conflict("Bu mashina raqami boshqa telefon raqam bilan ro'yxatdan o'tgan. "
-                        + "Raqamingiz o'zgargan bo'lsa yoki mashinani yangi sotib olgan bo'lsangiz, avtoservisingizga "
-                        + "murojaat qiling — ular telefon raqamini yangilab beradi.");
+                throw ApiException.conflict(I18n.t("err.car.phoneMismatch"));
             }
+            // Saytda tanlangan til mijozning tili bo'ladi (bot xabarlari ham shu tilda)
+            if (req.lang() != null && !req.lang().isBlank()) car.setLang(Lang.of(req.lang()));
             // Ism-familiya ATAYLAB o'zgartirilmaydi: raqam va telefonni bilgan begona odam
             // mijozning ismini almashtira olmasligi kerak (ismni avtoservis profildan tuzatadi).
             if (login.needsConfirmation(car)) {
@@ -87,6 +90,7 @@ public class CarService {
         car.setLastName(trim(req.lastName()));
         car.setPhone(phone);
         car.setPlateNumber(plate);
+        car.setLang(req.lang() != null && !req.lang().isBlank() ? Lang.of(req.lang()) : LangContext.get());
         cars.save(car);
         audit.system(car.getFullName(), "Mijoz", null, "Saytda ro'yxatdan o'tdi: " + prettyPlate(plate));
         return RegisterResponse.ready(car.getToken(), app.carUrl(car.getToken()), false);
@@ -109,6 +113,7 @@ public class CarService {
     public CarDto updateSettings(String token, SettingsRequest req) {
         Car car = find(token);
         if (req.smsEnabled() != null) car.setSmsEnabled(req.smsEnabled());
+        if (req.lang() != null && !req.lang().isBlank()) car.setLang(Lang.of(req.lang()));
         return toDto(car);
     }
 
@@ -118,13 +123,13 @@ public class CarService {
         LocalDate today = LocalDate.now(app.zoneId());
 
         if (req.nextDate().isBefore(req.doneDate())) {
-            throw ApiException.badRequest("Keyingi sana almashtirilgan sanadan oldin bo'lishi mumkin emas");
+            throw ApiException.badRequest(I18n.t("err.rec.nextBeforeDone"));
         }
         if (req.doneDate().isAfter(today)) {
-            throw ApiException.badRequest("Almashtirilgan sana kelajakda bo'lishi mumkin emas");
+            throw ApiException.badRequest(I18n.t("err.rec.doneFuture"));
         }
         if (req.type() == ServiceType.OTHER && (req.customName() == null || req.customName().isBlank())) {
-            throw ApiException.badRequest("\"Boshqa\" turi uchun nomini yozing");
+            throw ApiException.badRequest(I18n.t("err.rec.otherName"));
         }
 
         // Shu turdagi oldingi faol yozuvni arxivga o'tkazamiz ("Boshqa" turi bundan mustasno)
@@ -161,11 +166,10 @@ public class CarService {
     public CarDto deleteRecord(String token, Long id) {
         Car car = find(token);
         ServiceRecord r = records.findByIdAndCar(id, car)
-                .orElseThrow(() -> ApiException.notFound("Yozuv topilmadi"));
+                .orElseThrow(() -> ApiException.notFound(I18n.t("err.rec.notFound")));
         if (r.getCenter() != null) {
             // Avtoservis kiritgan ishda narx, to'lov, qarz va ballar bor — mijoz uni o'chira olmaydi
-            throw ApiException.badRequest("Bu yozuvni «" + r.getCenter().getName() + "» avtoservisi kiritgan, uni o'chirib bo'lmaydi. "
-                    + "Xato bo'lsa, avtoservisga murojaat qiling.");
+            throw ApiException.badRequest(I18n.t("err.rec.centerOwned", r.getCenter().getName()));
         }
         records.delete(r);
         return toDto(car);
@@ -176,13 +180,27 @@ public class CarService {
     public boolean sendTest(String token) {
         Car car = find(token);
         if (car.getTelegramChatId() == null && !(car.isSmsEnabled() && sms.enabled())) {
-            throw ApiException.badRequest("Avval Telegram botga ulaning yoki SMS ni yoqing");
+            throw ApiException.badRequest(I18n.t("err.test.noChannel"));
         }
         boolean ok = notifications.notify(car,
-                "✅ Sinov xabari. Eslatmalar shu yerga keladi.\n🚗 " + html(prettyPlate(car.getPlateNumber())),
-                "Sinov xabari: eslatmalar shu raqamga keladi.");
-        if (!ok) throw ApiException.badRequest("Xabar yuborilmadi. Sozlamalarni tekshiring.");
+                I18n.t(car.lang(), "bot.test", html(prettyPlate(car.getPlateNumber()))),
+                I18n.t(car.lang(), "sms.test"));
+        if (!ok) throw ApiException.badRequest(I18n.t("err.test.notSent"));
         return true;
+    }
+
+    /** Shu chatga ulangan mashinalar (bot tilini aniqlash uchun). */
+    @Transactional(readOnly = true)
+    public List<Car> carsOf(long chatId) {
+        return cars.findAllByTelegramChatId(chatId);
+    }
+
+    /** Botdan tilni almashtirish: chatga ulangan barcha mashinalar uchun. @return o'zgargan mashinalar soni */
+    @Transactional
+    public int setLang(long chatId, Lang lang) {
+        List<Car> list = cars.findAllByTelegramChatId(chatId);
+        list.forEach(c -> c.setLang(lang));
+        return list.size();
     }
 
     // ---------- Telegram bot uchun ----------
@@ -198,16 +216,15 @@ public class CarService {
      * mashinani shu chatga bog'laydi. Bu SMS kodsiz, bepul tasdiqlash.
      */
     @Transactional
-    public Car linkTelegram(String token, long chatId, String telegramPhone) {
+    public Car linkTelegram(String token, long chatId, String telegramPhone, Lang telegramLang) {
         Car car = find(token);
         String digits = telegramPhone == null ? "" : telegramPhone.replaceAll("\\D", "");
         if (!digits.equals(car.getPhone())) {
-            throw ApiException.badRequest("Telegram raqamingiz saytda ro'yxatdan o'tgan raqamga mos kelmadi ("
-                    + prettyPhone(car.getPhone()) + "). Telegram shu raqamdagi akkauntdan ulanishi kerak. "
-                    + "Raqamingiz o'zgargan bo'lsa, avtoservisingizga murojaat qiling — ular raqamni yangilaydi, "
-                    + "keyin qayta ulaning.");
+            throw ApiException.badRequest(I18n.t("err.link.phoneMismatch", prettyPhone(car.getPhone())));
         }
         car.setTelegramChatId(chatId);
+        // Saytda til tanlanmagan bo'lsa — Telegram profilidagi til
+        if (car.getLang() == null && telegramLang != null) car.setLang(telegramLang);
         audit.system(car.getFullName(), "Mijoz", null, prettyPlate(car.getPlateNumber()) + " egasi Telegram botga ulandi");
         return car;
     }
@@ -216,10 +233,7 @@ public class CarService {
     @Transactional(readOnly = true)
     public String statusText(long chatId) {
         List<Car> list = cars.findAllByTelegramChatId(chatId);
-        if (list.isEmpty()) {
-            return "Sizda ulangan mashina yo'q.\nSaytda ro'yxatdan o'ting va mashina sahifasidagi "
-                    + "\"Telegramga ulash\" tugmasini bosing:\n" + app.baseUrl();
-        }
+        if (list.isEmpty()) return I18n.t("bot.status.noCars", app.baseUrl());
         LocalDate today = LocalDate.now(app.zoneId());
         StringBuilder sb = new StringBuilder();
         for (Car car : list) {
@@ -228,19 +242,19 @@ public class CarService {
             sb.append("\n");
             List<ServiceRecord> active = records.findAllByCarAndActiveTrueOrderByNextDateAsc(car);
             if (active.isEmpty()) {
-                sb.append("   Hali servis yozuvi yo'q\n");
+                sb.append("   ").append(I18n.t("bot.status.noRecords")).append("\n");
             }
             for (ServiceRecord r : active) {
                 long d = ChronoUnit.DAYS.between(today, r.getNextDate());
-                String left = d > 0 ? d + " kun qoldi" : d == 0 ? "bugun!" : (-d) + " kun o'tdi!";
+                String left = d > 0 ? I18n.t("bot.status.daysLeft", d) : d == 0 ? I18n.t("bot.status.today") : I18n.t("bot.status.overdue", -d);
                 Integer kmLeft = r.kmLeft();
                 boolean kmDue = kmLeft != null && kmLeft <= 0, kmSoon = kmLeft != null && kmLeft <= app.reminderKmBefore();
                 String icon = d <= 0 || kmDue ? "🔴" : d <= app.reminderDaysBefore() || kmSoon ? "🟡" : "🟢";
                 sb.append("   ").append(icon).append(" ").append(html(r.displayName()))
                         .append(" — ").append(date(r.getNextDate())).append(" (").append(left).append(")");
                 if (r.getNextMileage() != null) {
-                    sb.append(", ").append(MileageService.km(r.getNextMileage())).append(" da");
-                    if (kmLeft != null) sb.append(kmLeft <= 0 ? " (probeg yetdi!)" : " (" + MileageService.km(kmLeft) + " qoldi)");
+                    sb.append(", ").append(I18n.t("bot.km.at", MileageService.km(r.getNextMileage())));
+                    if (kmLeft != null) sb.append(" (").append(kmLeft <= 0 ? I18n.t("bot.status.kmReached") : I18n.t("bot.km.left", MileageService.km(kmLeft))).append(")");
                 }
                 sb.append("\n");
             }
@@ -253,17 +267,14 @@ public class CarService {
     @Transactional(readOnly = true)
     public String loyaltyText(long chatId) {
         List<Car> list = cars.findAllByTelegramChatId(chatId);
-        if (list.isEmpty()) {
-            return "Sizda ulangan mashina yo'q.\nSaytda ro'yxatdan o'ting va mashina sahifasidagi "
-                    + "\"Telegramga ulash\" tugmasini bosing:\n" + app.baseUrl();
-        }
+        if (list.isEmpty()) return I18n.t("bot.status.noCars", app.baseUrl());
         return loyalty.botText(list);
     }
 
     // ---------- Yordamchi ----------
 
     private Car find(String token) {
-        return cars.findByToken(token).orElseThrow(() -> ApiException.notFound("Mashina topilmadi"));
+        return cars.findByToken(token).orElseThrow(() -> ApiException.notFound(I18n.t("err.car.notFound")));
     }
 
     private CarDto toDto(Car car) {

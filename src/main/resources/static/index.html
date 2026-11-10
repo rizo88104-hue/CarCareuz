@@ -74,6 +74,7 @@
   </footer>
 </div>
 
+<script src="/i18n.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   const form = $('form'), msg = $('msg'), btn = $('submit');
@@ -83,7 +84,7 @@
     const last = JSON.parse(localStorage.getItem('carcare:last') || 'null');
     if (last && last.token) {
       $('recent').classList.remove('hidden');
-      $('recentLink').textContent = '🚗 ' + last.plate + ' sahifasini ochish';
+      $('recentLink').textContent = T('🚗 ' + last.plate + ' sahifasini ochish');
       $('recentLink').href = '/car/' + last.token;
     }
   } catch (e) {}
@@ -100,11 +101,12 @@
       show("Iltimos, barcha maydonlarni to'ldiring", 'err');
       return;
     }
-    btn.disabled = true; btn.textContent = 'Yuborilmoqda...';
+    btn.disabled = true; btn.textContent = T('Yuborilmoqda...');
+    data.lang = LANG; // saytda tanlangan til — mijozning tili bo'ladi (bot xabarlari ham)
     try {
       const res = await fetch('/api/cars', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Lang': LANG },
         body: JSON.stringify(data)
       });
       const body = await res.json().catch(() => ({}));
@@ -113,7 +115,7 @@
       location.href = '/car/' + body.token;
     } catch (err) {
       show(err instanceof TypeError ? "Server bilan aloqa yo'q. Internetni tekshirib, birozdan keyin qayta urinib ko'ring." : err.message, 'err');
-      btn.disabled = false; btn.textContent = 'Davom etish →';
+      btn.disabled = false; btn.textContent = T('Davom etish →');
     }
   });
 
@@ -137,7 +139,7 @@
     };
     const tick = async () => {
       try {
-        const r = await fetch('/api/login/' + encodeURIComponent(code));
+        const r = await fetch('/api/login/' + encodeURIComponent(code), { headers: { 'X-Lang': LANG } });
         const s = await r.json().catch(() => ({}));
         if (!r.ok) return fail(s.error || 'So\'rov topilmadi. Qayta urinib ko\'ring.');
         if (s.status === 'approved') { location.href = '/car/' + s.token; return; }
@@ -153,7 +155,7 @@
     clearTimeout(confirmTimer);
     $('confirm').classList.add('hidden');
     form.closest('.card').classList.remove('hidden');
-    btn.disabled = false; btn.textContent = 'Davom etish →';
+    btn.disabled = false; btn.textContent = T('Davom etish →');
   };
 </script>
 </body>

@@ -9,9 +9,9 @@
   <style>
     .lcards { display: grid; gap: 12px; }
     .lcard { border-radius: 16px; padding: 16px 18px; color: #fff; background: linear-gradient(135deg, #8a5a2b, #c48a4a); }
-    .lcard.Kumush { background: linear-gradient(135deg, #5d6b78, #a3b1bd); }
-    .lcard.Oltin { background: linear-gradient(135deg, #a7741a, #e2b84b); }
-    .lcard.Platina { background: linear-gradient(135deg, #1f3b57, #4f7fa6); }
+    .lcard.SILVER { background: linear-gradient(135deg, #5d6b78, #a3b1bd); }
+    .lcard.GOLD { background: linear-gradient(135deg, #a7741a, #e2b84b); }
+    .lcard.PLATINUM { background: linear-gradient(135deg, #1f3b57, #4f7fa6); }
     .lcard.off { filter: grayscale(.8); }
     .lcard .top { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; opacity: .92; }
     .lcard .bal { font-size: 26px; font-weight: 800; margin: 8px 0 2px; font-variant-numeric: tabular-nums; }
@@ -155,6 +155,7 @@
   </div>
 </div>
 
+<script src="/i18n.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   let token = location.pathname.startsWith('/car/')
@@ -174,7 +175,7 @@
     let res;
     try {
       res = await fetch('/api/cars/' + encodeURIComponent(token) + path, {
-        headers: { 'Content-Type': 'application/json' }, ...opts
+        headers: { 'Content-Type': 'application/json', 'X-Lang': LANG }, ...opts
       });
     } catch (e) { throw new Error('Server bilan aloqa yo\'q. Internetni tekshirib, birozdan keyin qayta urinib ko\'ring.'); }
     const body = await res.json().catch(() => ({}));
@@ -237,7 +238,7 @@
     $('loyCard').classList.toggle('hidden', !cards.length);
     const n = (v) => Number(v || 0).toLocaleString('ru-RU');
     $('loyCards').innerHTML = cards.map(k =>
-      '<div class="lcard ' + esc(k.levelLabel) + (k.active ? '' : ' off') + '"><div class="top"><span>📍 ' + esc(k.centerName) + '</span><span>' + esc(k.levelIcon + ' ' + k.levelLabel) + '</span></div>' +
+      '<div class="lcard ' + esc(k.level || '') + (k.active ? '' : ' off') + '"><div class="top"><span>📍 ' + esc(k.centerName) + '</span><span>' + esc(k.levelIcon + ' ' + k.levelLabel) + '</span></div>' +
       '<div class="bal">' + n(k.balance) + ' ball</div><div class="num">' + esc(k.cardDisplay) + '</div>' +
       '<div class="meta">' + (k.active
         ? 'Keshbek ' + k.cashbackPct + '%' + (k.discountPct ? ' · chegirma ' + k.discountPct + '%' : '') +
@@ -337,7 +338,7 @@
     const del = e.target.closest('[data-del]');
     const renew = e.target.closest('[data-renew]');
     if (del) {
-      if (!confirm('Bu yozuvni o\'chirasizmi?')) return;
+      if (!confirm(T('Bu yozuvni o\'chirasizmi?'))) return;
       try { render(await api('/records/' + del.dataset.del, { method: 'DELETE' })); flash('O\'chirildi'); }
       catch (err) { flash(err.message, 'err'); }
     } else if (renew) {
@@ -371,7 +372,7 @@
 
   // Havolani yangilash: yangi maxfiy kalit, eski havola (va saqlangan havolalar) ishlamay qoladi
   $('rotateBtn').onclick = async () => {
-    if (!confirm('Havola yangilansinmi?\n\nEski havola darhol ishlamay qoladi. Saqlab qo\'ygan havolangiz bo\'lsa, yangisini qayta saqlashingiz kerak.')) return;
+    if (!confirm(T('Havola yangilansinmi?\n\nEski havola darhol ishlamay qoladi. Saqlab qo\'ygan havolangiz bo\'lsa, yangisini qayta saqlashingiz kerak.'))) return;
     $('rotateBtn').disabled = true;
     try {
       const c = await api('/rotate', { method: 'POST' });
@@ -384,6 +385,14 @@
     $('rotateBtn').disabled = false;
   };
 
+  // Til almashtirilganda mijozning tili serverda ham saqlanadi (bot xabarlari shu tilda keladi)
+  (async () => {
+    try {
+      const saved = localStorage.getItem('carcare:langSynced:' + token);
+      if (token && saved !== LANG) { await api('/settings', { method: 'PATCH', body: JSON.stringify({ lang: LANG }) }); localStorage.setItem('carcare:langSynced:' + token, LANG); }
+    } catch (e) {}
+  })();
+
   // Telegramga ulangandan keyin sahifaga qaytganda holatni yangilash
   document.addEventListener('visibilitychange', async () => {
     if (!document.hidden && car && !car.telegramConnected) {
@@ -394,7 +403,7 @@
   // ---------- yuklash ----------
   (async () => {
     try {
-      const types = await fetch('/api/service-types').then(r => r.json());
+      const types = await fetch('/api/service-types', { headers: { 'X-Lang': LANG } }).then(r => r.json());
       $('type').innerHTML = types.map(t => `<option value="${t.code}">${esc(t.label)}</option>`).join('');
       if (!token) throw Object.assign(new Error(), { status: 404 });
       render(await api(''));

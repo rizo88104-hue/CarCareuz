@@ -61,7 +61,7 @@ public class HomeService {
     @Transactional(readOnly = true)
     public Home home(AdminPrincipal p) {
         ServiceCenter center = centers.findById(p.centerId())
-                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "Servis topilmadi"));
+                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, uz.carcare.i18n.I18n.t("err.center.notFound")));
         LocalDate today = LocalDate.now(app.zoneId());
         LocalDate monthStart = today.withDayOfMonth(1);
 

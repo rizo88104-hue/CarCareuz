@@ -41,10 +41,10 @@ public final class CustomerDtos {
 
     /** Mijozni qo'lda qo'shish. */
     public record NewCustomerRequest(
-            @jakarta.validation.constraints.NotBlank(message = "Mashina raqamini kiriting") String plateNumber,
-            @jakarta.validation.constraints.NotBlank(message = "Ismni kiriting") @Size(max = 60) String firstName,
+            @jakarta.validation.constraints.NotBlank(message = "{v.plate}") String plateNumber,
+            @jakarta.validation.constraints.NotBlank(message = "{v.firstName}") @Size(max = 60) String firstName,
             @Size(max = 60) String lastName,
-            @jakarta.validation.constraints.NotBlank(message = "Telefonni kiriting") String phone,
+            @jakarta.validation.constraints.NotBlank(message = "{v.phone}") String phone,
             LocalDate birthDate,
             String gender,
             @Size(max = 60) String source,
@@ -52,12 +52,12 @@ public final class CustomerDtos {
     ) {
     }
 
-    public record BlacklistRequest(boolean blacklisted, @Size(max = 200, message = "Sabab 200 belgidan oshmasin") String reason) {
+    public record BlacklistRequest(boolean blacklisted, @Size(max = 200, message = "{v.reasonLong}") String reason) {
     }
 
     public record MessageRequest(
-            @jakarta.validation.constraints.NotBlank(message = "Xabar matnini yozing")
-            @Size(max = 1000, message = "Xabar 1000 belgidan oshmasin") String text
+            @jakarta.validation.constraints.NotBlank(message = "{v.messageText}")
+            @Size(max = 1000, message = "{v.messageLong}") String text
     ) {
     }
 
@@ -111,13 +111,13 @@ public final class CustomerDtos {
      * profileEdit = true bo'lsa tug'ilgan kun, jinsi va manba kelganidek saqlanadi (null — tozalanadi).
      */
     public record CustomerUpdate(
-            @Size(max = 60, message = "Ism juda uzun") String firstName,
-            @Size(max = 60, message = "Familiya juda uzun") String lastName,
+            @Size(max = 60, message = "{v.firstNameLong}") String firstName,
+            @Size(max = 60, message = "{v.lastNameLong}") String lastName,
             String phone,
-            @Size(max = 500, message = "Izoh 500 belgidan oshmasin") String note,
+            @Size(max = 500, message = "{v.noteLong}") String note,
             LocalDate birthDate,
             String gender,
-            @Size(max = 60, message = "Manba juda uzun") String source,
+            @Size(max = 60, message = "{v.sourceLong}") String source,
             boolean profileEdit
     ) {
     }

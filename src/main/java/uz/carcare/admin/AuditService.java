@@ -21,7 +21,7 @@ public class AuditService {
 
     /** Xodim qilgan ish. center — ish qaysi servisga tegishli (super admin uchun ham beriladi). */
     public void staff(AdminPrincipal p, ServiceCenter center, String action) {
-        save(new ActivityLog(p.staffId(), p.fullName(), p.role().label(), center, action));
+        save(new ActivityLog(p.staffId(), p.fullName(), p.role().labelUz(), center, action)); // jurnal doim o'zbekcha
     }
 
     /** Tizim yoki mijoz qilgan ish (bot, ro'yxatdan o'tish ...). */

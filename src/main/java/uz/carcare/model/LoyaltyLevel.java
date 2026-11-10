@@ -15,7 +15,12 @@ public enum LoyaltyLevel {
         this.icon = icon;
     }
 
+    /** Joriy tilda (LangContext). */
     public String label() {
+        return uz.carcare.i18n.I18n.t("level." + name());
+    }
+
+    public String labelUz() {
         return label;
     }
 

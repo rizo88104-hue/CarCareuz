@@ -533,6 +533,7 @@
 <!-- Chek — body ning bevosita farzandi: chop etishda faqat shu ko'rinadi (JS to'ldiradi) -->
 <div id="receipt" aria-hidden="true"></div>
 
+<script src="/i18n.js"></script>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -561,9 +562,9 @@
     try {
       res = await fetch('/api/admin' + path, {
         ...opts,
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }
+        headers: { 'Content-Type': 'application/json', 'X-Lang': LANG, ...(token ? { Authorization: 'Bearer ' + token } : {}) }
       });
-    } catch (e) { throw new Error('Server bilan aloqa yo\'q. Internetni tekshirib, birozdan keyin qayta urinib ko\'ring.'); }
+    } catch (e) { throw new Error(T('Server bilan aloqa yo\'q. Internetni tekshirib, birozdan keyin qayta urinib ko\'ring.')); }
     if (res.status === 204) return null;
     const body = await res.json().catch(() => ({}));
     if ((res.status === 401 || res.status === 403) && path !== '/login' && path !== '/me' && !path.startsWith('/password')) {
@@ -647,8 +648,8 @@
       start();
     } catch (err) {
       flash('loginMsg', err.message, 'err');
-      // Kod eskirgan yoki urinishlar tugagan — login/parolga qaytamiz
-      if (/eskirgan|muddati|tugadi/i.test(err.message)) { loginChallenge = null; showCodeStep(false); }
+      // Kod eskirgan yoki urinishlar tugagan — login/parolga qaytamiz (xabar o'zbek yoki rus tilida)
+      if (/eskirgan|muddati|tugadi|устарел|истекло|исчерпаны/i.test(err.message)) { loginChallenge = null; showCodeStep(false); }
     }
   };
   $('codeBack').onclick = () => { loginChallenge = null; showCodeStep(false); $('loginMsg').className = 'msg'; };
@@ -704,7 +705,7 @@
     $('recentTitle').textContent = master ? 'Mening ishlarim' : 'Oxirgi ishlar';
     if (typesLoaded) { renderItems(); return; }
     typesLoaded = true;
-    TYPES = await fetch('/api/service-types').then(r => r.json());
+    TYPES = await fetch('/api/service-types', { headers: { 'X-Lang': LANG } }).then(r => r.json());
     resetForm();
   }
 
@@ -1639,7 +1640,7 @@
 
   $('custExport').onclick = async () => {
     try {
-      const res = await fetch('/api/admin/center/customers/export', { headers: { Authorization: 'Bearer ' + token } });
+      const res = await fetch('/api/admin/center/customers/export', { headers: { Authorization: 'Bearer ' + token, 'X-Lang': LANG } });
       if (!res.ok) { const b = await res.json().catch(() => ({})); throw new Error(b.error || 'Yuklab bo\'lmadi'); }
       const blob = await res.blob();
       const a = document.createElement('a');

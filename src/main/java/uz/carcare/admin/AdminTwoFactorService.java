@@ -7,6 +7,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uz.carcare.config.TelegramProperties;
+import uz.carcare.i18n.I18n;
+import uz.carcare.i18n.Lang;
+import uz.carcare.i18n.LangContext;
 import uz.carcare.model.AdminLoginCode;
 import uz.carcare.model.StaffUser;
 import uz.carcare.model.StaffUser.Role;
@@ -78,23 +81,17 @@ public class AdminTwoFactorService {
     public String startChallenge(StaffUser u, String ip) {
         Instant now = Instant.now();
         if (codes.countByStaffAndCreatedAtAfter(u, now.minus(Duration.ofMinutes(10))) >= MAX_CODES_PER_WINDOW) {
-            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,
-                    "Kod juda ko'p marta so'raldi. 10 daqiqadan keyin qayta urinib ko'ring.");
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, I18n.t("err.2fa.tooMany"));
         }
         String code = String.format("%06d", RANDOM.nextInt(1_000_000));
         String challenge = Formats.newToken() + Formats.newToken();
         codes.save(new AdminLoginCode(u, challenge, sha256(code), ip, now.plus(CODE_TTL)));
 
-        String text = "🔐 <b>Admin panelga kirish kodi</b>\n\n"
-                + "<code>" + code + "</code>\n\n"
-                + "Kod " + CODE_TTL.toMinutes() + " daqiqa amal qiladi va bir marta ishlaydi.\n"
-                + "Kirishga urinilgan IP: <code>" + html(ip == null ? "?" : ip) + "</code>\n\n"
-                + "⚠️ Agar bu siz bo'lmasangiz — kimdir parolingizni bilib olgan. "
-                + "Kodni hech kimga bermang va parolni darhol o'zgartiring.";
+        String text = I18n.t(u.lang(), "bot.admin2fa.code", code, CODE_TTL.toMinutes(), html(ip == null ? "?" : ip));
         if (!telegram.sendMessage(u.getTelegramChatId(), text)) {
-            throw ApiException.badRequest("Telegram'ga kod yuborilmadi. Botni bloklagan bo'lsangiz, uni oching va qayta urinib ko'ring.");
+            throw ApiException.badRequest(I18n.t("err.2fa.notSent"));
         }
-        audit.system(u.displayName(), u.getRole().label(), null, "Kirish: Telegram'ga tasdiqlash kodi yuborildi (IP " + ip + ")");
+        audit.system(u.displayName(), u.getRole().labelUz(), null, "Kirish: Telegram'ga tasdiqlash kodi yuborildi (IP " + ip + ")");
         return challenge;
     }
 
@@ -102,20 +99,18 @@ public class AdminTwoFactorService {
     @Transactional
     public StaffUser verify(String challenge, String code) {
         AdminLoginCode c = codes.findByChallenge(challenge == null ? "" : challenge.trim())
-                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, "Kirish muddati o'tdi. Login va parolni qayta kiriting."));
+                .orElseThrow(() -> new ApiException(HttpStatus.UNAUTHORIZED, I18n.t("err.2fa.sessionExpired")));
         Instant now = Instant.now();
         if (c.isUsed() || c.isExpired(now) || c.getAttempts() >= MAX_ATTEMPTS) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "Kod eskirgan. Login va parolni qayta kiriting — yangi kod yuboriladi.");
+            throw new ApiException(HttpStatus.UNAUTHORIZED, I18n.t("err.2fa.codeExpired"));
         }
         c.setAttempts(c.getAttempts() + 1);
         String digits = code == null ? "" : code.replaceAll("\\D", "");
         if (digits.length() != 6 || !constantTimeEquals(sha256(digits), c.getCodeHash())) {
             int left = MAX_ATTEMPTS - c.getAttempts();
             StaffUser u = c.getStaff();
-            audit.system(u.displayName(), u.getRole().label(), null, "Kirish: noto'g'ri tasdiqlash kodi (IP " + c.getIp() + ")");
-            throw new ApiException(HttpStatus.UNAUTHORIZED, left > 0
-                    ? "Kod noto'g'ri. Yana " + left + " ta urinish qoldi."
-                    : "Kod noto'g'ri. Urinishlar tugadi — login va parolni qayta kiriting.");
+            audit.system(u.displayName(), u.getRole().labelUz(), null, "Kirish: noto'g'ri tasdiqlash kodi (IP " + c.getIp() + ")");
+            throw new ApiException(HttpStatus.UNAUTHORIZED, left > 0 ? I18n.t("err.2fa.wrongCode", left) : I18n.t("err.2fa.noAttempts"));
         }
         c.setUsed(true);
         return c.getStaff();
@@ -135,17 +130,13 @@ public class AdminTwoFactorService {
     @Transactional
     public String link(String code, long chatId) {
         LinkTicket t = linkTickets.remove(code);
-        if (t == null || Instant.now().isAfter(t.expiresAt())) {
-            return "❌ Ulash havolasi eskirgan. Admin panelda «Telegram'ga ulash» tugmasini qayta bosing.";
-        }
+        if (t == null || Instant.now().isAfter(t.expiresAt())) return I18n.t("bot.admin2fa.linkExpired");
         StaffUser u = staff.findById(t.staffId()).orElse(null);
-        if (u == null || u.getRole() != Role.SUPER_ADMIN) return "❌ Xodim topilmadi.";
+        if (u == null || u.getRole() != Role.SUPER_ADMIN) return I18n.t("bot.admin2fa.staffNotFound");
         u.setTelegramChatId(chatId);
-        audit.system(u.displayName(), u.getRole().label(), null, "Ikki bosqichli tasdiq (Telegram) yoqildi");
+        audit.system(u.displayName(), u.getRole().labelUz(), null, "Ikki bosqichli tasdiq (Telegram) yoqildi");
         log.info("Super admin {} uchun Telegram 2FA ulandi", u.getUsername());
-        return "✅ <b>Ikki bosqichli tasdiq yoqildi.</b>\n\n"
-                + "Endi admin panelga kirishda login va paroldan keyin shu yerga 6 xonali kod keladi. "
-                + "Kodni hech kimga bermang.";
+        return I18n.t(u.lang(), "bot.admin2fa.enabled");
     }
 
     /** Panel uchun: 2FA ni o'chirish (parol tekshiruvi chaqiruvchida). */
@@ -154,9 +145,8 @@ public class AdminTwoFactorService {
         if (u.getTelegramChatId() == null) return;
         Long chat = u.getTelegramChatId();
         u.setTelegramChatId(null);
-        audit.system(u.displayName(), u.getRole().label(), null, "Ikki bosqichli tasdiq (Telegram) o'chirildi");
-        telegram.sendLater(chat, "⚠️ Admin panel uchun ikki bosqichli tasdiq <b>o'chirildi</b>. "
-                + "Bu siz bo'lmasangiz, parolni darhol o'zgartiring.");
+        audit.system(u.displayName(), u.getRole().labelUz(), null, "Ikki bosqichli tasdiq (Telegram) o'chirildi");
+        telegram.sendLater(chat, I18n.t(u.lang(), "bot.admin2fa.disabled"));
     }
 
     @Scheduled(fixedDelay = 3_600_000, initialDelay = 900_000)

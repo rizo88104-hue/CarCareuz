@@ -42,6 +42,16 @@ public class Car {
     @Column(nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
+    // ---------- Til ----------
+
+    /** Mijozning tili: "uz" yoki "ru" (sayt va bot xabarlari shu tilda). null — o'zbek. */
+    @Column(length = 2)
+    private String lang;
+
+    public uz.carcare.i18n.Lang lang() { return uz.carcare.i18n.Lang.of(lang); }
+    public void setLang(uz.carcare.i18n.Lang l) { this.lang = l == null ? null : l.code(); }
+    public String getLang() { return lang; }
+
     // ---------- Probeg (km bo'yicha eslatmalar uchun) ----------
 
     /** Oxirgi ma'lum probeg, km. Mijoz (sahifa/bot) yoki avtoservis (ish kiritganda) yangilaydi. */

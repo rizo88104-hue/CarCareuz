@@ -28,7 +28,12 @@ public class StaffUser {
             this.label = label;
         }
 
+        /** Joriy tilda (LangContext). Jurnal uchun o'zbekcha: {@link #labelUz()}. */
         public String label() {
+            return uz.carcare.i18n.I18n.t("role." + name());
+        }
+
+        public String labelUz() {
             return label;
         }
 
@@ -68,6 +73,13 @@ public class StaffUser {
 
     /** Ikki bosqichli tasdiq uchun Telegram chati (super admin). null — 2FA o'chiq. */
     private Long telegramChatId;
+
+    /** Panel tili ("uz"/"ru") — oxirgi kirishda saqlanadi; 2FA Telegram xabarlari shu tilda. */
+    @Column(length = 2)
+    private String lang;
+
+    public uz.carcare.i18n.Lang lang() { return uz.carcare.i18n.Lang.of(lang); }
+    public void setLang(uz.carcare.i18n.Lang l) { this.lang = l == null ? null : l.code(); }
 
     public Long getTelegramChatId() { return telegramChatId; }
     public void setTelegramChatId(Long telegramChatId) { this.telegramChatId = telegramChatId; }

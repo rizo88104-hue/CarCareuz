@@ -56,9 +56,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
             res.setStatus(429);
             res.setContentType("application/json");
             res.setCharacterEncoding(StandardCharsets.UTF_8.name());
-            res.getWriter().write(loginCall
-                    ? "{\"error\":\"Parol ko'p marta noto'g'ri kiritildi. 10 daqiqadan keyin urinib ko'ring.\"}"
-                    : "{\"error\":\"Juda ko'p so'rov. Bir daqiqadan keyin urinib ko'ring.\"}");
+            String msg = uz.carcare.i18n.I18n.t(loginCall ? "err.rate.login" : "err.rate.general").replace("\"", "'");
+            res.getWriter().write("{\"error\":\"" + msg + "\"}");
             return;
         }
         chain.doFilter(req, res);

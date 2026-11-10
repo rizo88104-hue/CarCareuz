@@ -7,6 +7,8 @@ import org.springframework.transaction.annotation.Transactional;
 import uz.carcare.admin.AdminDtos.*;
 import uz.carcare.config.AppProperties;
 import uz.carcare.config.TelegramProperties;
+import uz.carcare.i18n.I18n;
+import uz.carcare.i18n.LangContext;
 import uz.carcare.loyalty.LoyaltyService;
 import uz.carcare.sms.SmsService;
 import uz.carcare.util.QrCodes;
@@ -107,26 +109,26 @@ public class AdminService {
         LocalDate today = today();
 
         if (req.doneDate().isAfter(today)) {
-            throw ApiException.badRequest("Bajarilgan sana kelajakda bo'lishi mumkin emas");
+            throw ApiException.badRequest(I18n.t("err.rec.doneFuture"));
         }
         // Bir tashrifdagi ishlar. Eski format (bitta type) ham qabul qilinadi.
         List<RecordItem> items = req.items() != null && !req.items().isEmpty() ? req.items()
                 : List.of(new RecordItem(req.type(), req.customName(), req.nextDate(), req.nextMileage(), req.price()));
-        if (items.size() > 10) throw ApiException.badRequest("Bir tashrifda ko'pi bilan 10 ta ish kiritiladi");
+        if (items.size() > 10) throw ApiException.badRequest(I18n.t("err.visit.max10"));
         Set<ServiceType> seen = new HashSet<>();
         for (RecordItem it : items) {
-            if (it == null || it.type() == null) throw ApiException.badRequest("Nima qilinganini tanlang");
+            if (it == null || it.type() == null) throw ApiException.badRequest(I18n.t("err.visit.pickType"));
             String label = it.type() == ServiceType.OTHER && it.customName() != null && !it.customName().isBlank()
                     ? it.customName().trim() : it.type().getLabel();
             if (it.type() == ServiceType.OTHER && (it.customName() == null || it.customName().isBlank())) {
-                throw ApiException.badRequest("\"Boshqa\" turi uchun nomini yozing");
+                throw ApiException.badRequest(I18n.t("err.rec.otherName"));
             }
             if (it.type() != ServiceType.OTHER && !seen.add(it.type())) {
-                throw ApiException.badRequest("«" + label + "» ikki marta tanlangan");
+                throw ApiException.badRequest(I18n.t("err.visit.duplicate", label));
             }
-            if (it.nextDate() == null) throw ApiException.badRequest("«" + label + "»: keyingi almashtirish sanasini kiriting");
+            if (it.nextDate() == null) throw ApiException.badRequest(I18n.t("err.visit.nextDateMissing", label));
             if (it.nextDate().isBefore(req.doneDate())) {
-                throw ApiException.badRequest("«" + label + "»: keyingi sana bajarilgan sanadan oldin bo'lishi mumkin emas");
+                throw ApiException.badRequest(I18n.t("err.visit.nextBeforeDone", label));
             }
         }
 
@@ -135,7 +137,7 @@ public class AdminService {
         if (!p.isMaster() && req.masterId() != null) {
             StaffUser m = staff.findByIdAndCenter(req.masterId(), center)
                     .filter(s -> !s.isBlocked())
-                    .orElseThrow(() -> ApiException.badRequest("Tanlangan usta topilmadi"));
+                    .orElseThrow(() -> ApiException.badRequest(I18n.t("err.visit.masterNotFound")));
             masterName = m.displayName();
         }
 
@@ -160,23 +162,23 @@ public class AdminService {
         }
         boolean money = total > 0;
         long bonusUse = money && req.bonus() != null ? req.bonus() : 0;
-        if (bonusUse > total) throw ApiException.badRequest("Ball bilan to'lov jami narxdan oshmasin");
+        if (bonusUse > total) throw ApiException.badRequest(I18n.t("err.pay.bonusOverTotal"));
         long paidNow = money ? (req.paid() == null ? total - bonusUse : req.paid()) : 0;
         if (money) {
             if (paidNow + bonusUse > total) {
-                throw ApiException.badRequest(bonusUse > 0 ? "To'lov va ball birgalikda jami narxdan (" + money(total) + ") oshmasin"
-                        : "To'langan summa jami narxdan (" + money(total) + ") oshmasin");
+                throw ApiException.badRequest(bonusUse > 0 ? I18n.t("err.pay.bonusAndPaidOver", money(total))
+                        : I18n.t("err.pay.paidOver", money(total)));
             }
             if (paidNow + bonusUse < total) {
-                if (req.payDueDate() == null) throw ApiException.badRequest("Qarz qolyapti — to'lash muddatini kiriting");
-                if (req.payDueDate().isBefore(today)) throw ApiException.badRequest("To'lash muddati o'tgan sana bo'lishi mumkin emas");
+                if (req.payDueDate() == null) throw ApiException.badRequest(I18n.t("err.pay.dueMissing"));
+                if (req.payDueDate().isBefore(today)) throw ApiException.badRequest(I18n.t("err.pay.duePast"));
             }
         }
 
         boolean created = false;
         if (car == null) {
             if (req.firstName() == null || req.firstName().isBlank()) {
-                throw ApiException.badRequest("Yangi mijoz: ismini kiriting");
+                throw ApiException.badRequest(I18n.t("err.visit.newCustomerName"));
             }
             car = new Car();
             car.setToken(newToken());
@@ -228,8 +230,8 @@ public class AdminService {
             for (ServiceRecord r : priced) capTotal += loyalty.redeemCap(prog, acc, r);
             if (prog == null || acc == null || bonusUse > Math.min(capTotal, acc.getBalance())) {
                 long allowed = acc == null ? 0 : Math.min(capTotal, acc.getBalance());
-                throw ApiException.badRequest("Ball bilan ko'pi bilan " + money(allowed) + " to'lash mumkin"
-                        + (prog == null ? "" : " (har bir ish narxining " + prog.getMaxRedeemPct() + "% gacha)"));
+                throw ApiException.badRequest(I18n.t("err.pay.bonusCap", money(allowed))
+                        + (prog == null ? "" : " " + I18n.t("err.pay.bonusCapPct", prog.getMaxRedeemPct())));
             }
             long left = bonusUse;
             for (ServiceRecord r : priced) {
@@ -284,41 +286,46 @@ public class AdminService {
         // Sadoqat ishtirok etgan bo'lsa — mijozga bitta kvitansiya (barcha ishlar bilan)
         boolean loyaltyUsed = discountTotal > 0 || bonusUse > 0 || (earn != null && earn.points() > 0);
         if (money && loyaltyUsed && car.getTelegramChatId() != null) {
-            StringBuilder lines = new StringBuilder();
-            for (ServiceRecord r : priced) {
-                lines.append("• ").append(html(r.displayName())).append(": ").append(money(r.getPrice())).append("\n");
-            }
-            telegram.sendLater(car.getTelegramChatId(),
-                    "🧾 <b>To'lov</b>\n\n🚗 <b>" + html(prettyPlate(plate)) + "</b>\n" + lines
-                            + (discountTotal > 0 ? "💰 Narx: " + money(listTotal) + " − chegirma " + discountPct + "% = <b>" + money(total) + "</b>\n"
-                            : "💰 Jami: <b>" + money(total) + "</b>\n")
-                            + (bonusUse > 0 ? "🎁 Ball bilan: <b>" + money(bonusUse) + "</b>\n" : "")
-                            + (paidNow > 0 ? "💵 To'landi: <b>" + money(paidNow) + "</b> (" + method.label().toLowerCase() + ")\n" : "")
-                            + (debt > 0 ? "📌 Qarz: <b>" + money(debt) + "</b>, muddat " + date(req.payDueDate()) + "\n" : "")
-                            + LoyaltyService.receiptLine(earn)
-                            + "\n\n📍 " + html(center.getName()));
+            final Car cc = car;
+            final Payment.Method m = method;
+            final long fDebt = debt, fPaid = paidNow, fBonus = bonusUse, fTotal = total, fList = listTotal, fDisc = discountTotal;
+            final int fPct = discountPct;
+            final LoyaltyService.Earn fEarn = earn;
+            String receipt = LangContext.with(cc.lang(), () -> {
+                StringBuilder lines = new StringBuilder();
+                for (ServiceRecord r : priced) {
+                    lines.append("• ").append(html(r.displayName())).append(": ").append(money(r.getPrice())).append("\n");
+                }
+                return I18n.t("bot.receipt.title") + "\n\n🚗 <b>" + html(prettyPlate(plate)) + "</b>\n" + lines
+                        + (fDisc > 0 ? I18n.t("bot.receipt.priceDiscount", money(fList), fPct, money(fTotal)) + "\n"
+                        : I18n.t("bot.receipt.total", money(fTotal)) + "\n")
+                        + (fBonus > 0 ? I18n.t("bot.receipt.bonus", money(fBonus)) + "\n" : "")
+                        + (fPaid > 0 ? I18n.t("bot.receipt.paid", money(fPaid), m.label().toLowerCase()) + "\n" : "")
+                        + (fDebt > 0 ? I18n.t("bot.receipt.debt", money(fDebt), date(req.payDueDate())) + "\n" : "")
+                        + LoyaltyService.receiptLine(fEarn)
+                        + "\n\n📍 " + html(center.getName());
+            });
+            telegram.sendLater(car.getTelegramChatId(), receipt);
         }
 
         Boolean delivered = null;
-        String msg = created
-                ? "Yangi mijoz qo'shildi."
-                : (saved.size() > 1 ? saved.size() + " ta ish saqlandi. Mijoz sahifasida ko'rinadi." : "Saqlandi. Mijoz sahifasida ko'rinadi.");
+        String msg = created ? I18n.t("ui.save.newCustomer")
+                : (saved.size() > 1 ? I18n.t("ui.save.savedMany", saved.size()) : I18n.t("ui.save.savedOne"));
         if (earn != null && earn.points() > 0) {
-            msg += " Keshbek: +" + points(earn.points()) + " (balans " + points(earn.balance()) + ")."
-                    + (earn.levelUp() ? " Mijoz " + earn.level().label() + " darajaga ko'tarildi!" : "");
+            msg += " " + I18n.t("ui.save.cashback", points(earn.points()), points(earn.balance()))
+                    + (earn.levelUp() ? " " + I18n.t("ui.save.levelUp", earn.level().label()) : "");
         }
         String readyChannel = null;
         if (p.isMaster()) {
-            msg = (saved.size() > 1 ? saved.size() + " ta ish saqlandi." : "Saqlandi.") + " Mijozga xabarni administrator yuboradi.";
+            msg = (saved.size() > 1 ? I18n.t("ui.save.masterMany", saved.size()) : I18n.t("ui.save.masterOne")) + " " + I18n.t("ui.save.masterNote");
         } else if (req.notifyReady()) {
             readyChannel = deliverReady(saved, center);
             delivered = readyChannel != null;
             if (delivered) audit.staff(p, center, prettyPlate(plate) + " egasiga «Tayyor, keling» yubordi (" + readyChannel + ")");
-            msg += delivered ? " \"Tayyor, keling\" xabari " + readyChannel + " orqali yuborildi."
-                    : " \"Tayyor\" xabari yetkazilmadi: mijoz Telegramga ulanmagan — qo'ng'iroq qiling: " + prettyPhone(car.getPhone()) + ".";
+            msg += " " + (delivered ? I18n.t("ui.save.readySent", readyChannel) : I18n.t("ui.save.readyFailed", prettyPhone(car.getPhone())));
         }
         if (car.getTelegramChatId() == null && !p.isMaster()) {
-            msg += " Mijoz pastdagi QR kodni skaner qilsa (yoki chekdagi), eslatmalar Telegramga bepul keladi.";
+            msg += " " + I18n.t("ui.save.qrHint");
         }
         List<AdminRecordDto> dtos = saved.stream().map(r -> toDto(r, today, p.canContactCustomers())).toList();
         return new SaveResult(dtos.get(0), created, delivered, msg, dtos,
@@ -329,8 +336,8 @@ public class AdminService {
     @Transactional(readOnly = true)
     public ConnectInfo connectInfo(AdminPrincipal p, Long carId) {
         ServiceCenter center = center(p);
-        Car car = cars.findById(carId).orElseThrow(() -> ApiException.notFound("Mijoz topilmadi"));
-        if (!records.existsByCarAndCenter(car, center)) throw ApiException.notFound("Bu mijoz sizning servisingizda yo'q");
+        Car car = cars.findById(carId).orElseThrow(() -> ApiException.notFound(I18n.t("err.customer.notFound")));
+        if (!records.existsByCarAndCenter(car, center)) throw ApiException.notFound(I18n.t("err.customer.notYours"));
         return connectInfo(car, center);
     }
 
@@ -347,17 +354,17 @@ public class AdminService {
         ServiceCenter center = center(p);
         ServiceRecord r = records.findById(recordId)
                 .filter(x -> x.getCenter() != null && x.getCenter().getId().equals(center.getId()))
-                .orElseThrow(() -> ApiException.notFound("Yozuv topilmadi"));
+                .orElseThrow(() -> ApiException.notFound(I18n.t("err.rec.notFound")));
         if (r.getReadyNotifiedAt() != null
                 && Duration.between(r.getReadyNotifiedAt(), Instant.now()).toMinutes() < 2) {
-            throw ApiException.badRequest("Xabar hozirgina yuborilgan. Biroz kuting.");
+            throw ApiException.badRequest(I18n.t("err.ready.justSent"));
         }
         Car car = r.getCar();
         String channel = deliverReady(r, center);
         boolean ok = channel != null;
         if (ok) audit.staff(p, center, prettyPlate(car.getPlateNumber()) + " egasiga «Tayyor, keling» yubordi (" + channel + ")");
         return new ReadyResult(ok, prettyPhone(car.getPhone()), car.getPhone(),
-                ok ? "Xabar " + channel + " orqali yuborildi" : "Mijoz Telegramga ulanmagan. QR kodni ko'rsating yoki qo'ng'iroq qiling.", channel);
+                ok ? I18n.t("ui.ready.sent", channel) : I18n.t("ui.ready.failed"), channel);
     }
 
     @Transactional(readOnly = true)
@@ -401,10 +408,10 @@ public class AdminService {
     public StaffDto addStaff(AdminPrincipal p, StaffRequest req) {
         ServiceCenter center = center(p);
         if (req.role() != Role.ADMINISTRATOR && req.role() != Role.MASTER) {
-            throw ApiException.badRequest("Faqat administrator yoki usta qo'shish mumkin");
+            throw ApiException.badRequest(I18n.t("err.staff.roleOnly"));
         }
         String username = req.username().trim().toLowerCase();
-        if (staff.existsByUsername(username)) throw ApiException.conflict("Bu login band. Boshqasini tanlang.");
+        if (staff.existsByUsername(username)) throw ApiException.conflict(I18n.t("err.login.taken"));
         AdminAuthService.validatePassword(req.password());
 
         StaffUser u = new StaffUser();
@@ -414,16 +421,16 @@ public class AdminService {
         u.setRole(req.role());
         u.setCenter(center);
         staff.save(u);
-        audit.staff(p, center, "Yangi xodim qo'shdi: " + u.displayName() + " (" + req.role().label().toLowerCase() + ")");
+        audit.staff(p, center, "Yangi xodim qo'shdi: " + u.displayName() + " (" + req.role().labelUz().toLowerCase() + ")");
         return staffDto(u);
     }
 
     @Transactional
     public StaffDto updateStaff(AdminPrincipal p, Long id, StaffUpdateRequest req) {
         ServiceCenter center = center(p);
-        StaffUser u = staff.findByIdAndCenter(id, center).orElseThrow(() -> ApiException.notFound("Xodim topilmadi"));
-        if (u.getId().equals(p.staffId())) throw ApiException.badRequest("O'zingizni o'zgartira olmaysiz. Parolni «Parol» tugmasi orqali almashtiring.");
-        if (u.getRole() == Role.DIRECTOR) throw ApiException.badRequest("Direktorni faqat super admin o'zgartira oladi");
+        StaffUser u = staff.findByIdAndCenter(id, center).orElseThrow(() -> ApiException.notFound(I18n.t("err.staff.notFound")));
+        if (u.getId().equals(p.staffId())) throw ApiException.badRequest(I18n.t("err.staff.self"));
+        if (u.getRole() == Role.DIRECTOR) throw ApiException.badRequest(I18n.t("err.staff.director"));
 
         if (req.blocked() != null && req.blocked() != u.isBlocked()) {
             u.setBlocked(req.blocked());
@@ -468,7 +475,7 @@ public class AdminService {
     @Transactional
     public CenterDto createCenter(AdminPrincipal p, CenterRequest req) {
         String username = req.username().trim().toLowerCase();
-        if (staff.existsByUsername(username)) throw ApiException.conflict("Bu login band. Boshqasini tanlang.");
+        if (staff.existsByUsername(username)) throw ApiException.conflict(I18n.t("err.login.taken"));
         AdminAuthService.validatePassword(req.password());
 
         ServiceCenter c = new ServiceCenter();
@@ -490,7 +497,7 @@ public class AdminService {
 
     @Transactional
     public CenterDto updateCenter(AdminPrincipal p, Long id, CenterUpdateRequest req) {
-        ServiceCenter c = centers.findById(id).orElseThrow(() -> ApiException.notFound("Servis topilmadi"));
+        ServiceCenter c = centers.findById(id).orElseThrow(() -> ApiException.notFound(I18n.t("err.center.notFound")));
         if (req.name() != null && !req.name().isBlank()) c.setName(trim(req.name()));
         if (req.address() != null) c.setAddress(trim(req.address()));
         if (req.phone() != null) c.setPhone(req.phone().isBlank() ? null : normalizePhone(req.phone()));
@@ -502,7 +509,7 @@ public class AdminService {
         if (req.newPassword() != null && !req.newPassword().isBlank()) {
             AdminAuthService.validatePassword(req.newPassword());
             StaffUser director = staff.findFirstByCenterAndRoleOrderByIdAsc(c, Role.DIRECTOR)
-                    .orElseThrow(() -> ApiException.notFound("Servis direktori topilmadi"));
+                    .orElseThrow(() -> ApiException.notFound(I18n.t("err.center.directorNotFound")));
             director.setPasswordHash(auth.hash(req.newPassword()));
             sessions.deleteAllByStaff(director);
             audit.staff(p, c, "«" + c.getName() + "» direktori parolini tikladi");
@@ -516,14 +523,14 @@ public class AdminService {
         if (centerId == null) {
             return logs.findRecent(PageRequest.of(0, LOG_LIMIT)).stream().map(this::logDto).toList();
         }
-        ServiceCenter c = centers.findById(centerId).orElseThrow(() -> ApiException.notFound("Servis topilmadi"));
+        ServiceCenter c = centers.findById(centerId).orElseThrow(() -> ApiException.notFound(I18n.t("err.center.notFound")));
         return logs.findRecentForCenter(c, PageRequest.of(0, LOG_LIMIT)).stream().map(this::logDto).toList();
     }
 
     /** Shu servisdan keyin qaytib kelmagan mijozlar va sababi. */
     @Transactional(readOnly = true)
     public List<MissedDto> missed(Long centerId) {
-        ServiceCenter c = centers.findById(centerId).orElseThrow(() -> ApiException.notFound("Servis topilmadi"));
+        ServiceCenter c = centers.findById(centerId).orElseThrow(() -> ApiException.notFound(I18n.t("err.center.notFound")));
         LocalDate today = today();
         List<MissedDto> out = new ArrayList<>();
         for (ServiceRecord r : records.findAllForCenter(c)) {
@@ -534,22 +541,22 @@ public class AdminService {
                 ServiceCenter by = r.getReplacedByCenter();
                 if (by != null && by.getId().equals(c.getId())) continue; // qaytib kelgan
                 if (by != null) {
-                    reason = "Boshqa servisga borgan";
-                    hint = "Keyingi servisni «" + by.getName() + "» qilgan";
+                    reason = I18n.t("missed.elsewhere");
+                    hint = I18n.t("missed.elsewhere.hint", by.getName());
                 } else {
-                    reason = "Egasining o'zi kiritgan";
-                    hint = "Boshqa joyda yoki o'zi qildirgan bo'lishi mumkin";
+                    reason = I18n.t("missed.self");
+                    hint = I18n.t("missed.self.hint");
                 }
             } else if (r.isActive() && overdue > 0) {
                 if (car.getTelegramChatId() == null) {
-                    reason = "Telegram ulanmagan";
-                    hint = "Eslatma bormagan — qo'ng'iroq qiling";
+                    reason = I18n.t("missed.noTelegram");
+                    hint = I18n.t("missed.noTelegram.hint");
                 } else if (r.isDueReminderSent()) {
-                    reason = "Eslatma borgan, lekin kelmagan";
-                    hint = "Qo'ng'iroq qilib sababini so'rang";
+                    reason = I18n.t("missed.ignored");
+                    hint = I18n.t("missed.ignored.hint");
                 } else {
-                    reason = "Eslatma yetkazilmagan";
-                    hint = "Mijoz botni bloklagan bo'lishi mumkin";
+                    reason = I18n.t("missed.undelivered");
+                    hint = I18n.t("missed.undelivered.hint");
                 }
             } else {
                 continue; // muddati hali kelmagan
@@ -579,12 +586,16 @@ public class AdminService {
      */
     private String deliverReady(List<ServiceRecord> list, ServiceCenter center) {
         Car car = list.get(0).getCar();
+        return LangContext.with(car.lang(), () -> deliverReadyIn(list, center, car));
+    }
+
+    private String deliverReadyIn(List<ServiceRecord> list, ServiceCenter center, Car car) {
         if (car.getTelegramChatId() == null) {
             if (!(car.isSmsEnabled() && sms.enabled())) return null;
             String link = telegramProps.deepLink(car.getToken());
-            String text = prettyPlate(car.getPlateNumber()) + " mashinangiz tayyor, kelib olib ketishingiz mumkin. "
-                    + center.getName() + (center.getPhone() == null ? "" : ", tel " + prettyPhone(center.getPhone())) + "."
-                    + (link == null ? "" : " Servis muddatini eslatib turishimiz uchun Telegramga ulaning: " + link);
+            String text = I18n.t("sms.ready", prettyPlate(car.getPlateNumber()), center.getName())
+                    + (center.getPhone() == null ? "" : " " + I18n.t("sms.ready.phone", prettyPhone(center.getPhone()))) + "."
+                    + (link == null ? "" : " " + I18n.t("sms.ready.link", link));
             if (!sms.send(car.getPhone(), text)) return null;
             Instant now = Instant.now();
             list.forEach(r -> r.setReadyNotifiedAt(now));
@@ -593,21 +604,20 @@ public class AdminService {
         StringBuilder done = new StringBuilder();
         if (list.size() == 1) {
             ServiceRecord r = list.get(0);
-            done.append("🔧 Bajarildi: <b>").append(html(r.displayName())).append("</b>\n")
-                    .append("📅 Keyingi almashtirish: <b>").append(date(r.getNextDate())).append("</b>\n");
+            done.append(I18n.t("bot.ready.doneOne", html(r.displayName()), date(r.getNextDate()))).append("\n");
         } else {
-            done.append("🔧 Bajarildi:\n");
+            done.append(I18n.t("bot.ready.doneMany")).append("\n");
             for (ServiceRecord r : list) {
-                done.append("• <b>").append(html(r.displayName())).append("</b> — keyingisi ").append(date(r.getNextDate())).append("\n");
+                done.append("• ").append(I18n.t("bot.ready.item", html(r.displayName()), date(r.getNextDate()))).append("\n");
             }
         }
-        String text = "✅ <b>Mashinangiz tayyor!</b>\n\n"
+        String text = I18n.t("bot.ready.title") + "\n\n"
                 + "🚗 <b>" + html(prettyPlate(car.getPlateNumber())) + "</b>\n"
                 + done + "\n"
                 + "📍 <b>" + html(center.getName()) + "</b>\n"
                 + (center.getAddress() == null || center.getAddress().isBlank() ? "" : html(center.getAddress()) + "\n")
                 + (center.getPhone() == null ? "" : "📞 " + prettyPhone(center.getPhone()) + "\n")
-                + "\nKelib olib ketishingiz mumkin. Rahmat! 🙏";
+                + "\n" + I18n.t("bot.ready.footer");
         boolean ok = telegram.sendMessage(car.getTelegramChatId(), text);
         if (!ok) return null;
         Instant now = Instant.now();
@@ -687,8 +697,8 @@ public class AdminService {
 
     private ServiceCenter center(AdminPrincipal p) {
         ServiceCenter c = centers.findById(p.centerId())
-                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, "Servis topilmadi"));
-        if (!c.isActive()) throw new ApiException(HttpStatus.FORBIDDEN, "Bu avtoservis o'chirilgan");
+                .orElseThrow(() -> new ApiException(HttpStatus.FORBIDDEN, I18n.t("err.center.notFound")));
+        if (!c.isActive()) throw new ApiException(HttpStatus.FORBIDDEN, I18n.t("err.center.disabled"));
         return c;
     }
 

@@ -32,12 +32,11 @@ public final class AdminDtos {
 
     /** Super admin yangi servis qo'shadi: servis + uning direktori. */
     public record CenterRequest(
-            @NotBlank(message = "Servis nomini kiriting") @Size(max = 100) String name,
+            @NotBlank(message = "{v.centerName}") @Size(max = 100) String name,
             @Size(max = 200) String address,
             String phone,
-            @NotBlank(message = "Direktor ismini kiriting") @Size(max = 80, message = "Ism juda uzun") String directorName,
-            @NotBlank(message = "Login kiriting") @Pattern(regexp = "^[a-zA-Z0-9_.]{3,40}$",
-                    message = "Login 3-40 ta lotin harfi, raqam, _ yoki . dan iborat bo'lsin") String username,
+            @NotBlank(message = "{v.directorName}") @Size(max = 80, message = "{v.nameLong}") String directorName,
+            @NotBlank(message = "{v.login}") @Pattern(regexp = "^[a-zA-Z0-9_.]{3,40}$", message = "{v.loginFormat}") String username,
             String password
     ) {
     }
@@ -47,11 +46,10 @@ public final class AdminDtos {
 
     /** Direktor yangi xodim qo'shadi. */
     public record StaffRequest(
-            @NotBlank(message = "Xodimning ismini kiriting") @Size(max = 80, message = "Ism juda uzun") String fullName,
-            @NotBlank(message = "Login kiriting") @Pattern(regexp = "^[a-zA-Z0-9_.]{3,40}$",
-                    message = "Login 3-40 ta lotin harfi, raqam, _ yoki . dan iborat bo'lsin") String username,
+            @NotBlank(message = "{v.staffName}") @Size(max = 80, message = "{v.nameLong}") String fullName,
+            @NotBlank(message = "{v.login}") @Pattern(regexp = "^[a-zA-Z0-9_.]{3,40}$", message = "{v.loginFormat}") String username,
             String password,
-            @NotNull(message = "Rolni tanlang") StaffUser.Role role
+            @NotNull(message = "{v.role}") StaffUser.Role role
     ) {
     }
 
@@ -61,11 +59,11 @@ public final class AdminDtos {
     /** Bitta tashrifdagi bitta ish (masalan: Motor moyi). Har biri alohida yozuv bo'lib saqlanadi. */
     public record RecordItem(
             ServiceType type,
-            @Size(max = 80, message = "Nomi juda uzun") String customName,
+            @Size(max = 80, message = "{v.nameLong}") String customName,
             LocalDate nextDate,
             @PositiveOrZero Integer nextMileage,
             /** Shu ish narxi (chegirmagacha), so'mda. Usta uchun e'tiborga olinmaydi. */
-            @PositiveOrZero(message = "Narx manfiy bo'lmasin") Long price
+            @PositiveOrZero(message = "{v.priceNeg}") Long price
     ) {
     }
 
@@ -74,14 +72,14 @@ public final class AdminDtos {
      * Bir tashrifda bir nechta ish: {@code items}. Eski format (bitta type/nextDate/price) ham qabul qilinadi.
      */
     public record AdminRecordRequest(
-            @NotBlank(message = "Mashina raqamini kiriting") String plateNumber,
+            @NotBlank(message = "{v.plate}") String plateNumber,
             @Size(max = 60) String firstName,
             @Size(max = 60) String lastName,
             String phone,
             /** Eski format: bitta ish. items bo'sh bo'lsa ishlatiladi. */
             ServiceType type,
             @Size(max = 80) String customName,
-            @NotNull(message = "Bajarilgan sanani kiriting") LocalDate doneDate,
+            @NotNull(message = "{v.doneDate}") LocalDate doneDate,
             LocalDate nextDate,
             @PositiveOrZero Integer mileage,
             @PositiveOrZero Integer nextMileage,
@@ -90,24 +88,24 @@ public final class AdminDtos {
             Long masterId,
             boolean notifyReady,
             /** Narx, so'mda. Usta uchun e'tiborga olinmaydi. */
-            @PositiveOrZero(message = "Narx manfiy bo'lmasin") Long price,
+            @PositiveOrZero(message = "{v.priceNeg}") Long price,
             /** Hozir to'langan summa. Narxdan kam bo'lsa, qolgani qarzga yoziladi. */
-            @PositiveOrZero(message = "To'lov manfiy bo'lmasin") Long paid,
+            @PositiveOrZero(message = "{v.paidNeg}") Long paid,
             Payment.Method paymentMethod,
             /** Qarzni to'lash muddati (qarz bo'lsa majburiy). */
             LocalDate payDueDate,
             /** Sadoqat chegirmasini qo'llash (null — ha). price — chegirmagacha bo'lgan narx. */
             Boolean applyDiscount,
             /** Bonus ball bilan to'lanadigan summa (butun tashrif uchun). */
-            @PositiveOrZero(message = "Ball manfiy bo'lmasin") Long bonus,
+            @PositiveOrZero(message = "{v.bonusNeg}") Long bonus,
             /** Bir tashrifdagi ishlar (1–10 ta). price/paid/bonus shu holda jami summaga nisbatan. */
-            @Size(max = 10, message = "Bir tashrifda ko'pi bilan 10 ta ish") List<@jakarta.validation.Valid RecordItem> items
+            @Size(max = 10, message = "{v.max10}") List<@jakarta.validation.Valid RecordItem> items
     ) {
     }
 
     /** Qarzni so'ndirish (to'lov qabul qilish). */
     public record PaymentRequest(
-            @NotNull(message = "Summani kiriting") @Positive(message = "Summa noldan katta bo'lsin") Long amount,
+            @NotNull(message = "{v.amount}") @Positive(message = "{v.amountPositive}") Long amount,
             Payment.Method method,
             @Size(max = 200) String note
     ) {

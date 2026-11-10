@@ -24,7 +24,7 @@ public final class Formats {
         String digits = raw == null ? "" : raw.replaceAll("\\D", "");
         if (digits.length() == 9) digits = "998" + digits;
         if (digits.length() != 12 || !digits.startsWith("998")) {
-            throw ApiException.badRequest("Telefon raqam noto'g'ri. Masalan: +998 90 123 45 67");
+            throw ApiException.badRequest(uz.carcare.i18n.I18n.t("err.phone.invalid"));
         }
         return digits;
     }
@@ -33,7 +33,7 @@ public final class Formats {
     public static String normalizePlate(String raw) {
         String plate = raw == null ? "" : raw.toUpperCase().replaceAll("[^A-Z0-9]", "");
         if (!PLATE.matcher(plate).matches()) {
-            throw ApiException.badRequest("Mashina raqami noto'g'ri. Masalan: 01 A 123 BC");
+            throw ApiException.badRequest(uz.carcare.i18n.I18n.t("err.plate.invalid"));
         }
         return plate;
     }

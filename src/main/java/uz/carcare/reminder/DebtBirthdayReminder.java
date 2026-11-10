@@ -10,6 +10,8 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import uz.carcare.admin.AuditService;
 import uz.carcare.config.AppProperties;
+import uz.carcare.i18n.I18n;
+import uz.carcare.i18n.LangContext;
 import uz.carcare.loyalty.LoyaltyService;
 import uz.carcare.model.Car;
 import uz.carcare.model.ServiceCenter;
@@ -34,6 +36,7 @@ import static uz.carcare.util.Formats.*;
  *  - TUG'ILGAN KUN: tabrik, yiliga bir marta (sadoqat dasturi bor servislar bonus ball qo'shadi).
  *  - SADOQAT: ballar kuyishidan 7 kun oldin ogohlantirish va muddati o'tgan ballarni kuydirish.
  * Faqat Telegram orqali (bepul). Mijoz botga ulanmagan bo'lsa, hech narsa yuborilmaydi.
+ * Xabarlar mijozning tilida.
  */
 @Service
 public class DebtBirthdayReminder {
@@ -109,20 +112,23 @@ public class DebtBirthdayReminder {
         for (List<ServiceRecord> list : groups.values()) {
             Car car = list.get(0).getCar();
             ServiceCenter center = list.get(0).getCenter();
-            StringBuilder sb = new StringBuilder("💳 <b>Qarz eslatmasi</b>\n\n")
-                    .append("📍 <b>").append(html(center.getName())).append("</b>\n")
-                    .append("🚗 ").append(html(prettyPlate(car.getPlateNumber()))).append("\n\n");
-            long total = 0;
-            for (ServiceRecord r : list) {
-                long d = ChronoUnit.DAYS.between(today, r.getPayDueDate());
-                String when = d == 1 ? "ertaga" : d == 0 ? "bugun" : (-d) + " kun o'tdi";
-                sb.append("• ").append(html(r.displayName())).append(": <b>").append(money(r.getRemaining()))
-                        .append("</b> — muddat ").append(date(r.getPayDueDate())).append(" (").append(when).append(")\n");
-                total += r.getRemaining();
-            }
-            if (list.size() > 1) sb.append("\nJami: <b>").append(money(total)).append("</b>\n");
-            if (center.getPhone() != null) sb.append("\n📞 ").append(prettyPhone(center.getPhone()));
-            if (telegram.sendMessage(car.getTelegramChatId(), sb.toString())) {
+            String text = LangContext.with(car.lang(), () -> {
+                StringBuilder sb = new StringBuilder(I18n.t("bot.debt.title")).append("\n\n")
+                        .append("📍 <b>").append(html(center.getName())).append("</b>\n")
+                        .append("🚗 ").append(html(prettyPlate(car.getPlateNumber()))).append("\n\n");
+                long total = 0;
+                for (ServiceRecord r : list) {
+                    long d = ChronoUnit.DAYS.between(today, r.getPayDueDate());
+                    String when = d == 1 ? I18n.t("bot.debt.tomorrow") : d == 0 ? I18n.t("bot.debt.today") : I18n.t("bot.debt.overdue", -d);
+                    sb.append("• ").append(html(r.displayName())).append(": <b>").append(money(r.getRemaining()))
+                            .append("</b> — ").append(I18n.t("bot.debt.due", date(r.getPayDueDate()))).append(" (").append(when).append(")\n");
+                    total += r.getRemaining();
+                }
+                if (list.size() > 1) sb.append("\n").append(I18n.t("bot.debt.total", money(total))).append("\n");
+                if (center.getPhone() != null) sb.append("\n📞 ").append(prettyPhone(center.getPhone()));
+                return sb.toString();
+            });
+            if (telegram.sendMessage(car.getTelegramChatId(), text)) {
                 list.forEach(r -> r.setDebtRemindedOn(today));
                 sent++;
             }
@@ -150,17 +156,19 @@ public class DebtBirthdayReminder {
             if (!isBirthday(car.getBirthDate(), today)) continue;
             List<LoyaltyService.Gift> mine = gifts.remove(car.getId());
             if (Integer.valueOf(today.getYear()).equals(car.getBirthdayGreetedYear())) {
-                if (mine != null) sendGifts(car.getTelegramChatId(), mine); // tabrik avval ketgan, sovg'a yangi
+                if (mine != null) sendGifts(car, mine); // tabrik avval ketgan, sovg'a yangi
                 continue;
             }
-            StringBuilder text = new StringBuilder("🎉 <b>Tug'ilgan kuningiz bilan, ").append(html(car.getFirstName())).append("!</b>\n\n")
-                    .append("Sizga sihat-salomatlik, oilangizga tinchlik va yo'llaringizda omad tilaymiz. 🚗💨\n");
-            if (mine != null) {
-                text.append("\n");
-                mine.forEach(g -> text.append(g.line()).append("\n"));
-            }
-            text.append("\nHurmat bilan, CarCare jamoasi");
-            if (telegram.sendMessage(car.getTelegramChatId(), text.toString())) {
+            String text = LangContext.with(car.lang(), () -> {
+                StringBuilder sb = new StringBuilder(I18n.t("bot.bday.greeting", html(car.getFirstName()))).append("\n");
+                if (mine != null) {
+                    sb.append("\n");
+                    mine.forEach(g -> sb.append(g.line()).append("\n"));
+                }
+                sb.append("\n").append(I18n.t("bot.bday.signature"));
+                return sb.toString();
+            });
+            if (telegram.sendMessage(car.getTelegramChatId(), text)) {
                 car.setBirthdayGreetedYear(today.getYear());
                 cars.save(car);
                 sent++;
@@ -169,10 +177,13 @@ public class DebtBirthdayReminder {
         return sent;
     }
 
-    private void sendGifts(Long chatId, List<LoyaltyService.Gift> list) {
-        if (chatId == null) return;
-        StringBuilder sb = new StringBuilder("🎂 <b>Tug'ilgan kun sovg'asi</b>\n\n");
-        list.forEach(g -> sb.append(g.line()).append("\n"));
-        telegram.sendMessage(chatId, sb.toString().trim());
+    private void sendGifts(Car car, List<LoyaltyService.Gift> list) {
+        if (car.getTelegramChatId() == null) return;
+        String text = LangContext.with(car.lang(), () -> {
+            StringBuilder sb = new StringBuilder(I18n.t("bot.bday.giftTitle")).append("\n\n");
+            list.forEach(g -> sb.append(g.line()).append("\n"));
+            return sb.toString().trim();
+        });
+        telegram.sendMessage(car.getTelegramChatId(), text);
     }
 }

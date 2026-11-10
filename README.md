@@ -67,6 +67,23 @@ ichida *Environment variables* ga yuqoridagi ikki o'zgaruvchini qo'shing.
 
 > Token berilmasa ham sayt ishlaydi — bot o'chiq turadi, xabarlar faqat konsolga yoziladi.
 
+## Tillar: o'zbek va rus
+
+- **Sayt va panel**: o'ng yuqori burchakdagi **O'Z | RU** tugmasi. Tanlov brauzerda saqlanadi (`localStorage`),
+  har API so'rovida `X-Lang` sarlavhasi yuboriladi — server xatolari va servis turlari shu tilda keladi.
+  Sahifa matnlari asl holda o'zbekcha, rus tili tanlanganda `static/i18n.js` dagi lug'at bo'yicha DOM
+  (matnlar, placeholder, title) tarjima qilinadi; keyin qo'shilgan matnlar ham (MutationObserver).
+  Yangi matn qo'shsangiz — `i18n.js` dagi `RU` lug'atiga o'zbekcha → ruscha juftini qo'shing
+  (o'zgaruvchan qism uchun `{0}`, `{1}` qoliplari).
+- **Mijoz tili** (`cars.lang`): saytda ro'yxatdan o'tganda tanlangan til; mashina sahifasida til
+  almashtirilsa serverda ham yangilanadi; botda `/ru` yoki `/uz` (yoki `/lang` tugmalari). Telegram'ga
+  ulanganda til tanlanmagan bo'lsa, Telegram profilidagi til olinadi. Barcha bot xabarlari, eslatmalar,
+  kvitansiyalar va SMS mijozning tilida.
+- **Xodim tili** (`staff_users.lang`): panelda tanlangan til kirishda saqlanadi — super admin 2FA kodi
+  shu tilda keladi. Faollik jurnali doim o'zbekcha yoziladi.
+- **Server matnlari**: `src/main/resources/i18n/messages_uz.properties` va `messages_ru.properties`
+  (`I18n.t("kalit", args)`, qoliplar `{0}`). Validatsiya xabarlari DTO larda `{v.kalit}` ko'rinishida.
+
 ## 3. Qanday ishlaydi
 
 1. `/` — foydalanuvchi ma'lumot kiritadi → `/car/{maxfiy-kalit}` sahifasi ochiladi.

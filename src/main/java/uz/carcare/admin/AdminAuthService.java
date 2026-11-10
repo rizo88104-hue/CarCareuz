@@ -13,6 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 import uz.carcare.util.IpAllowList;
+import uz.carcare.i18n.I18n;
+import uz.carcare.i18n.LangContext;
 import uz.carcare.model.AdminSession;
 import uz.carcare.model.StaffUser;
 import uz.carcare.model.StaffUser.Role;
@@ -106,10 +108,11 @@ public class AdminAuthService implements ApplicationRunner {
     public LoginResult login(String username, String password, String ip) {
         StaffUser u = staff.findByUsername(username == null ? "" : username.trim().toLowerCase()).orElse(null);
         if (u == null || password == null || !encoder.matches(password, u.getPasswordHash())) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "Login yoki parol noto'g'ri");
+            throw new ApiException(HttpStatus.UNAUTHORIZED, I18n.t("err.auth.badCredentials"));
         }
         checkAllowed(u);
         checkSuperIp(u, ip);
+        u.setLang(LangContext.get()); // panelda tanlangan til — 2FA va boshqa Telegram xabarlari shu tilda
         if (twoFactor.required(u)) {
             return LoginResult.pending(twoFactor.startChallenge(u, ip));
         }
@@ -149,7 +152,7 @@ public class AdminAuthService implements ApplicationRunner {
     public void disableTwoFactor(Long staffId, String password) {
         StaffUser u = staff.findById(staffId).orElseThrow(AdminAuthService::unauthorized);
         if (password == null || !encoder.matches(password, u.getPasswordHash())) {
-            throw ApiException.badRequest("Parol noto'g'ri");
+            throw ApiException.badRequest(I18n.t("err.auth.wrongPassword"));
         }
         twoFactor.unlink(u);
     }
@@ -157,9 +160,9 @@ public class AdminAuthService implements ApplicationRunner {
     /** Super admin uchun IP cheklovi (SUPERADMIN_ALLOWED_IPS). Boshqa rollarga tegmaydi. */
     private void checkSuperIp(StaffUser u, String ip) {
         if (u.getRole() != Role.SUPER_ADMIN || superIps.allows(ip)) return;
-        audit.system(u.displayName(), u.getRole().label(), null, "Super admin kirishi ruxsat etilmagan IP dan rad etildi: " + ip);
+        audit.system(u.displayName(), u.getRole().labelUz(), null, "Super admin kirishi ruxsat etilmagan IP dan rad etildi: " + ip);
         log.warn("Super admin kirishi ruxsat etilmagan IP dan rad etildi: {}", ip);
-        throw forbidden("Super admin bu IP manzildan kira olmaydi (" + ip + ")");
+        throw forbidden(I18n.t("err.auth.ipDenied", ip));
     }
 
     /** Joriy HTTP so'rovning IP manzili (Nginx orqasida forward-headers-strategy=native real IP ni beradi). */
@@ -189,10 +192,10 @@ public class AdminAuthService implements ApplicationRunner {
 
     public AdminPrincipal requireSuper(String authHeader) {
         AdminPrincipal p = require(authHeader);
-        if (!p.isSuper()) throw forbidden("Faqat super admin uchun");
+        if (!p.isSuper()) throw forbidden(I18n.t("err.auth.superOnly"));
         if (superIps.enabled()) {
             String ip = currentIp();
-            if (!superIps.allows(ip)) throw forbidden("Super admin bu IP manzildan kira olmaydi (" + ip + ")");
+            if (!superIps.allows(ip)) throw forbidden(I18n.t("err.auth.ipDenied", ip));
         }
         return p;
     }
@@ -200,20 +203,20 @@ public class AdminAuthService implements ApplicationRunner {
     /** Istalgan servis xodimi: direktor, administrator, usta. */
     public AdminPrincipal requireCenter(String authHeader) {
         AdminPrincipal p = require(authHeader);
-        if (p.centerId() == null) throw forbidden("Faqat avtoservis xodimlari uchun");
+        if (p.centerId() == null) throw forbidden(I18n.t("err.auth.centerOnly"));
         return p;
     }
 
     /** Direktor yoki administrator: mijozlar bilan aloqa. */
     public AdminPrincipal requireContact(String authHeader) {
         AdminPrincipal p = requireCenter(authHeader);
-        if (!p.canContactCustomers()) throw forbidden("Bu amal direktor yoki administrator uchun");
+        if (!p.canContactCustomers()) throw forbidden(I18n.t("err.auth.contactOnly"));
         return p;
     }
 
     public AdminPrincipal requireDirector(String authHeader) {
         AdminPrincipal p = requireCenter(authHeader);
-        if (!p.isDirector()) throw forbidden("Faqat direktor uchun");
+        if (!p.isDirector()) throw forbidden(I18n.t("err.auth.directorOnly"));
         return p;
     }
 
@@ -221,7 +224,7 @@ public class AdminAuthService implements ApplicationRunner {
     public void changePassword(Long staffId, String oldPassword, String newPassword) {
         StaffUser u = staff.findById(staffId).orElseThrow(AdminAuthService::unauthorized);
         if (oldPassword == null || !encoder.matches(oldPassword, u.getPasswordHash())) {
-            throw ApiException.badRequest("Joriy parol noto'g'ri");
+            throw ApiException.badRequest(I18n.t("err.auth.currentPassword"));
         }
         validatePassword(newPassword);
         u.setPasswordHash(encoder.encode(newPassword));
@@ -229,7 +232,7 @@ public class AdminAuthService implements ApplicationRunner {
     }
 
     public static void validatePassword(String p) {
-        if (p == null || p.length() < 8) throw ApiException.badRequest("Parol kamida 8 belgidan iborat bo'lsin");
+        if (p == null || p.length() < 8) throw ApiException.badRequest(I18n.t("err.auth.passwordShort"));
     }
 
     @Scheduled(fixedDelay = 3_600_000)
@@ -245,14 +248,14 @@ public class AdminAuthService implements ApplicationRunner {
     }
 
     private void checkAllowed(StaffUser u) {
-        if (u.isBlocked()) throw forbidden("Hisobingiz bloklangan. Direktor bilan bog'laning.");
+        if (u.isBlocked()) throw forbidden(I18n.t("err.auth.blocked"));
         if (u.getRole().isCenterRole() && (u.getCenter() == null || !u.getCenter().isActive())) {
-            throw forbidden("Bu avtoservis o'chirilgan. Super admin bilan bog'laning.");
+            throw forbidden(I18n.t("err.auth.centerDisabled"));
         }
     }
 
     private static ApiException unauthorized() {
-        return new ApiException(HttpStatus.UNAUTHORIZED, "Qaytadan tizimga kiring");
+        return new ApiException(HttpStatus.UNAUTHORIZED, I18n.t("err.auth.loginAgain"));
     }
 
     private static ApiException forbidden(String msg) {
